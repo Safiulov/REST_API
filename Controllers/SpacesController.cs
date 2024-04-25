@@ -44,7 +44,7 @@ namespace WebApplication2.Controllers
                             {
                                 Место = await reader.GetFieldValueAsync<string>(0),
                                 Статус = await reader.GetFieldValueAsync<string>(1),
-                              
+
                             };
 
                             result.Add(spaces);
@@ -75,7 +75,7 @@ namespace WebApplication2.Controllers
                             {
                                 Место = await reader.GetFieldValueAsync<string>(0),
                                 Статус = await reader.GetFieldValueAsync<string>(1),
-                                
+
 
 
                             };
@@ -91,7 +91,7 @@ namespace WebApplication2.Controllers
 
 
 
-       
+
 
         [HttpPost]
         public async Task<IActionResult> Post([FromBody] Spaces spaces)
@@ -104,7 +104,7 @@ namespace WebApplication2.Controllers
             await using (var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection")))
             {
                 await connection.OpenAsync();
-               await using (var command = new NpgsqlCommand("INSERT INTO \"Стоянка\".\"Spaces\"(\"Место\") VALUES (@Место);", connection))
+                await using (var command = new NpgsqlCommand("INSERT INTO \"Стоянка\".\"Spaces\"(\"Место\") VALUES (@Место);", connection))
                 {
                     command.Parameters.AddWithValue("Место", spaces.Место);
                     int rowsAffected = await command.ExecuteNonQueryAsync();
@@ -125,13 +125,13 @@ namespace WebApplication2.Controllers
         [HttpDelete("{id}")]
         public async Task<IActionResult> Delete(string id)
         {
-           await using (var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection")))
+            await using (var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection")))
             {
                 await connection.OpenAsync();
                 await using (var command = new NpgsqlCommand("DELETE FROM \"Стоянка\".\"Spaces\" WHERE \"Место\" = @id;", connection))
                 {
-                   
-                    command.Parameters.AddWithValue("id",id);
+
+                    command.Parameters.AddWithValue("id", id);
                     int rowsAffected = await command.ExecuteNonQueryAsync();
                     if (rowsAffected > 0)
                     {

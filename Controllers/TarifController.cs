@@ -66,7 +66,7 @@ namespace WebApplication2.Controllers
                 await connection.OpenAsync();
                 await using (var command = new NpgsqlCommand("SELECT * FROM \"Стоянка\".\"Tarifs\";", connection))
                 {
-                   await using (var reader = await command.ExecuteReaderAsync())
+                    await using (var reader = await command.ExecuteReaderAsync())
                     {
                         while (await reader.ReadAsync())
                         {
@@ -106,12 +106,12 @@ namespace WebApplication2.Controllers
                 {
 
 
-                    command.Parameters.AddWithValue("id",id);
-                    command.Parameters.AddWithValue("Название",tarifs.Название);
+                    command.Parameters.AddWithValue("id", id);
+                    command.Parameters.AddWithValue("Название", tarifs.Название);
                     command.Parameters.AddWithValue("Условие", tarifs.Условие);
                     command.Parameters.AddWithValue("Время_действия", tarifs.Время_действия);
-                    command.Parameters.AddWithValue("Стоимость",tarifs.Стоимость);
-                   
+                    command.Parameters.AddWithValue("Стоимость", tarifs.Стоимость);
+
 
                     int rowsAffected = await command.ExecuteNonQueryAsync();
 

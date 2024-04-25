@@ -11,34 +11,38 @@ namespace WebApplication2.Controllers
     public class RealisationController : Controller
     {
         private readonly IConfiguration _databaseService;
-
         public RealisationController(IConfiguration configuration)
         {
             _databaseService = configuration;
         }
 
-       
-
         [HttpGet]
         [Route("Search")]
         public async Task<IActionResult> Get(string columnName, string columnValue)
         {
+            // Проверяем, что параметры для поиска не пустые
             if (string.IsNullOrEmpty(columnName) || string.IsNullOrEmpty(columnValue))
             {
                 return BadRequest("Не указаны параметры для поиска");
             }
+            // Создаем список для хранения результатов поиска
             var result = new List<Realisation>();
-
+            // Создаем подключение к базе данных PostgreSQL
             using (var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection")))
             {
+                // Открываем соединение
                 await connection.OpenAsync();
+                // Создаем SQL-запрос для поиска записей в таблице Realisation
                 string sql = $"SELECT * from \"Стоянка\".\"Realisation\" WHERE cast({columnName} as text) ilike '%{columnValue}%';";
+                // Создаем команду для выполнения SQL-запроса
                 await using (var command = new NpgsqlCommand(sql, connection))
                 {
+                    // Выполняем SQL-запрос и читаем данные из результирующего набора
                     await using (var reader = await command.ExecuteReaderAsync())
                     {
                         while (await reader.ReadAsync())
                         {
+                            // Создаем объекты Realisation и добавляем их в список
                             var realisation = new Realisation
                             {
                                 Код = await reader.GetFieldValueAsync<int>(0),
@@ -58,24 +62,31 @@ namespace WebApplication2.Controllers
                     }
                 }
             }
-
+            // Возвращаем код ответа 200 (OK) и список результатов поиска
             return Ok(result);
         }
 
         [HttpGet]
         public async Task<IActionResult> Get()
         {
+            // Создаем список для хранения результатов запроса
             var result = new List<Realisation>();
 
+            // Создаем подключение к базе данных PostgreSQL
             await using (var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection")))
             {
+                // Открываем соединение
                 await connection.OpenAsync();
+
+                // Создаем SQL-запрос для получения всех записей из таблицы Realisation
                 await using (var command = new NpgsqlCommand("SELECT * FROM \"Стоянка\".\"Realisation\";", connection))
                 {
+                    // Выполняем SQL-запрос и читаем данные из результирующего набора
                     await using (var reader = await command.ExecuteReaderAsync())
                     {
                         while (await reader.ReadAsync())
                         {
+                            // Создаем объекты Realisation и добавляем их в список
                             var realisation = new Realisation
                             {
                                 Код = await reader.GetFieldValueAsync<int>(0),
@@ -96,35 +107,40 @@ namespace WebApplication2.Controllers
                 }
             }
 
+            // Возвращаем код ответа 200 (OK) и список результатов запроса
             return Ok(result);
         }
-
 
         [HttpPut("{id}")]
         public async Task<IActionResult> Put(int id, [FromBody] Realisation realisation)
         {
+            // Проверяем, что модель данных валидна
             if (!ModelState.IsValid)
             {
                 return BadRequest(ModelState);
             }
-
+            // Создаем подключение к базе данных PostgreSQL
             await using (var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection")))
             {
+                // Открываем соединение
                 await connection.OpenAsync();
+                // Создаем SQL-запрос для обновления записи в таблице Realisation
                 await using (var command = new NpgsqlCommand("UPDATE \"Стоянка\".\"Realisation\" SET  \"Дата_въезда\"=@Дата_въезда, \"Место\"=@Место, \"Код_услуги\"=@Код_услуги, \"Код_клиента\"=@Код_клиента WHERE \"Код\" = @id;", connection))
                 {
+                    // Добавляем параметры для запроса
                     command.Parameters.AddWithValue("id", id);
                     command.Parameters.AddWithValue("Дата_въезда", realisation.Дата_въезда);
                     command.Parameters.AddWithValue("Место", realisation.Место);
                     command.Parameters.AddWithValue("Код_услуги", realisation.Код_услуги);
                     command.Parameters.AddWithValue("Код_клиента", realisation.Код_клиента);
-
+                    // Выполняем SQL-запрос и получаем количество затронутых строк
                     int rowsAffected = await command.ExecuteNonQueryAsync();
-
+                    // Если запись успешно обновлена, возвращаем код ответа 200 (OK)
                     if (rowsAffected == 1)
                     {
                         return Ok();
                     }
+                    // Если запись не найдена, возвращаем код ответа 404 (Not Found)
                     else
                     {
                         return NotFound();
@@ -133,40 +149,41 @@ namespace WebApplication2.Controllers
             }
         }
 
-
         [HttpPost]
         public async Task<IActionResult> Post([FromBody] Realisation realisation)
         {
+            // Проверяем, что модель данных валидна
             if (!ModelState.IsValid)
             {
                 return BadRequest(ModelState);
             }
-
+            // Проверяем дополнительные условия для места и кода услуги
             if (realisation.Место.StartsWith("A") && (realisation.Код_услуги == 1 || realisation.Код_услуги == 2))
             {
                 ModelState.AddModelError(string.Empty, "Ошибка: место начинается с 'A' и код_услуги равен 1 или 2");
                 return BadRequest(ModelState);
             }
-
+            // Создаем подключение к базе данных PostgreSQL
             await using (var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection")))
             {
+                // Открываем соединение
                 await connection.OpenAsync();
-
-                          
-
+                // Создаем SQL-запрос для вставки записи в таблицу Realisation
                 await using (var command = new NpgsqlCommand("INSERT INTO \"Стоянка\".\"Realisation\"(\"Дата_въезда\", \"Место\",  \"Код_услуги\", \"Код_клиента\") VALUES (@Дата_въезда, @Место, @Код_услуги, @Код_клиента);", connection))
                 {
+                    // Добавляем параметры для запроса
                     command.Parameters.AddWithValue("Дата_въезда", realisation.Дата_въезда.ToUniversalTime());
                     command.Parameters.AddWithValue("Место", realisation.Место);
                     command.Parameters.AddWithValue("Код_услуги", realisation.Код_услуги);
                     command.Parameters.AddWithValue("Код_клиента", realisation.Код_клиента);
-                    
+                    // Выполняем SQL-запрос и получаем количество затронутых строк
                     int rowsAffected = await command.ExecuteNonQueryAsync();
-
+                    // Если запись успешно вставлена, возвращаем код ответа 200 (OK)
                     if (rowsAffected == 1)
                     {
                         return Ok();
                     }
+                    // Если запись не удалось вставить, возвращаем код ответа 400 (Bad Request)
                     else
                     {
                         return BadRequest(ModelState);
@@ -176,23 +193,28 @@ namespace WebApplication2.Controllers
         }
 
 
-
         [HttpDelete("{id}")]
         public async Task<IActionResult> Delete(int id)
         {
-           await using (var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection")))
+            // Создаем подключение к базе данных PostgreSQL
+            await using (var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection")))
             {
+                // Открываем соединение
                 await connection.OpenAsync();
+
+                // Создаем SQL-запрос для удаления записи из таблицы Realisation
                 await using (var command = new NpgsqlCommand("DELETE FROM \"Стоянка\".\"Realisation\" WHERE \"Код\" = @id;", connection))
                 {
+                    // Добавляем параметры для запроса
                     command.Parameters.AddWithValue("id", id);
-
+                    // Выполняем SQL-запрос и получаем количество затронутых строк
                     int rowsAffected = await command.ExecuteNonQueryAsync();
-
+                    // Если запись успешно удалена, возвращаем код ответа 200 (OK)
                     if (rowsAffected == 1)
                     {
                         return Ok();
                     }
+                    // Если запись не найдена, возвращаем код ответа 404 (Not Found)
                     else
                     {
                         return NotFound();
@@ -201,41 +223,39 @@ namespace WebApplication2.Controllers
             }
         }
 
-
         [HttpDelete]
         public async Task<IActionResult> DeleteAll()
         {
+            // Создаем SQL-запрос для сброса последовательности в таблице Realisation
             string query = "ALTER SEQUENCE \"Стоянка\".\"Realisation_Code_seq\" RESTART WITH 0";
 
-           await using (var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection")))
+            await using (var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection")))
             {
+                // Открываем соединение
                 await connection.OpenAsync();
-               await using (var transaction = connection.BeginTransaction())
                 {
                     try
                     {
-                       await using (var command = new NpgsqlCommand("DELETE FROM \"Стоянка\".\"Realisation\"", connection, transaction))
+                        // Создаем SQL-запрос для удаления всех записей из таблицы Realisation
+                        await using (var command = new NpgsqlCommand("DELETE FROM \"Стоянка\".\"Realisation\"", connection))
                         {
                             await command.ExecuteNonQueryAsync();
                         }
-
-                        await using (var command = new NpgsqlCommand(query, connection, transaction))
+                        // Создаем SQL-запрос для сброса последовательности в таблице Realisation
+                        await using (var command = new NpgsqlCommand(query, connection))
                         {
                             await command.ExecuteNonQueryAsync();
                         }
-                        transaction.Commit();
+                        // Возвращаем код ответа 200 (OK)
                         return Ok();
                     }
                     catch (Exception ex)
                     {
-                        transaction.Rollback();
+                        // Возвращаем код ответа 500 (Internal Server Error) и сообщение об ошибке
                         return StatusCode(500, ex.Message);
                     }
                 }
             }
         }
-
-
-
     }
 }
