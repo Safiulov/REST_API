@@ -70,7 +70,6 @@ namespace WebApplication2.Controllers
         }
 
         [HttpGet]
-        
         public async Task<IActionResult> Get()
         {
             // Создаем пустой список для хранения объектов Klients

@@ -164,6 +164,19 @@ namespace WebApplication2.Controllers
             {
                 await connection.OpenAsync();
 
+
+                await using (var command = new NpgsqlCommand("SELECT * FROM \"Стоянка\".\"Spaces\" WHERE \"Место\" = @Место", connection))
+                {
+                    command.Parameters.AddWithValue("Место", sales.Место);
+
+                    var spaceExists = await command.ExecuteScalarAsync();
+                    if (spaceExists == null)
+                    {
+                        ModelState.AddModelError(string.Empty, "Место не существует");
+                        return BadRequest(ModelState);
+                    }
+                }
+
                 // Проверяем, занято ли указанное место другим автомобилем на указанное время
                 await using (var command = new NpgsqlCommand("SELECT * FROM \"Стоянка\".\"Sales\" WHERE \"Место\" = @Место and \"Дата_выезда\" is null;", connection))
                 {

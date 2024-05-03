@@ -57,7 +57,7 @@ namespace WebApplication2.Controllers
         }
 
         [HttpGet]
-        [Route("all")]
+       
         public async Task<IActionResult> Get()
         {
             var result = new List<Spaces>();

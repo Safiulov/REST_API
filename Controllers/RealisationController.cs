@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Npgsql;
 using NpgsqlTypes;
+using System.Security.Cryptography;
 using WebApplication2.DB;
 using static Microsoft.EntityFrameworkCore.DbLoggerCategory;
 
@@ -102,6 +103,12 @@ namespace WebApplication2.Controllers
                             };
 
                             result.Add(realisation);
+                            int daysOverdue = (DateTime.Now - realisation.Дата_въезда).Days;
+
+                            if (realisation.Дата_въезда < DateTime.Now)
+                {
+                                realisation.Место = $"Просрочено место {realisation.Место} на {daysOverdue} дней";
+                            }
                         }
                     }
                 }
@@ -163,13 +170,31 @@ namespace WebApplication2.Controllers
                 ModelState.AddModelError(string.Empty, "Ошибка: место начинается с 'A' и код_услуги равен 1 или 2");
                 return BadRequest(ModelState);
             }
-            // Создаем подключение к базе данных PostgreSQL
+            // Создаем подключение к базе данных PostgreSQLz
             await using (var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection")))
             {
                 // Открываем соединение
                 await connection.OpenAsync();
-                // Создаем SQL-запрос для вставки записи в таблицу Realisation
-                await using (var command = new NpgsqlCommand("INSERT INTO \"Стоянка\".\"Realisation\"(\"Дата_въезда\", \"Место\",  \"Код_услуги\", \"Код_клиента\") VALUES (@Дата_въезда, @Место, @Код_услуги, @Код_клиента);", connection))
+
+
+                // Проверяем, занято ли указанное место другим автомобилем на указанное время
+                await using (var command = new NpgsqlCommand("SELECT * FROM \"Стоянка\".\"Realisation\" WHERE \"Место\" = @Место", connection))
+                {
+                    command.Parameters.AddWithValue("Место", realisation.Место);
+
+                    var existingRealisation = await command.ExecuteScalarAsync();
+                    if (existingRealisation != null)
+                    {
+                        ModelState.AddModelError(string.Empty, "Данное место уже занято");
+                        return BadRequest(ModelState);
+                    }
+                }
+
+                
+
+
+                    // Создаем SQL-запрос для вставки записи в таблицу Realisation
+                    await using (var command = new NpgsqlCommand("INSERT INTO \"Стоянка\".\"Realisation\"(\"Дата_въезда\", \"Место\",  \"Код_услуги\", \"Код_клиента\") VALUES (@Дата_въезда, @Место, @Код_услуги, @Код_клиента);", connection))
                 {
                     // Добавляем параметры для запроса
                     command.Parameters.AddWithValue("Дата_въезда", realisation.Дата_въезда.ToUniversalTime());

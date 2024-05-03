@@ -56,7 +56,7 @@ namespace WebApplication2.Controllers
         }
 
         [HttpGet]
-        [Route("all")]
+      
         public async Task<IActionResult> Get()
         {
             var result = new List<Tarifs>();
@@ -102,12 +102,12 @@ namespace WebApplication2.Controllers
             await using (var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection")))
             {
                 await connection.OpenAsync();
-                await using (var command = new NpgsqlCommand("UPDATE \"Стоянка\".\"Tarifs\" SET \"Название\"=@Название, \"Условие\"=@Условие, \"Время_действия\"=@Время_действия, \"Стоимость\"=@Стоимость WHERE \"Код_тарифа\" = @id;", connection))
+                await using (var command = new NpgsqlCommand("UPDATE \"Стоянка\".\"Tarifs\" SET \"Условие\"=@Условие, \"Время_действия\"=@Время_действия, \"Стоимость\"=@Стоимость WHERE \"Код_тарифа\" = @id;", connection))
                 {
 
 
                     command.Parameters.AddWithValue("id", id);
-                    command.Parameters.AddWithValue("Название", tarifs.Название);
+
                     command.Parameters.AddWithValue("Условие", tarifs.Условие);
                     command.Parameters.AddWithValue("Время_действия", tarifs.Время_действия);
                     command.Parameters.AddWithValue("Стоимость", tarifs.Стоимость);

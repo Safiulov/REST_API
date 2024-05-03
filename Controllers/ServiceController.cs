@@ -60,7 +60,7 @@ namespace WebApplication2.Controllers
         }
 
         [HttpGet]
-        [Route("all")]
+       
         // Возвращает список всех услуг
         public async Task<IActionResult> Get()
         {
@@ -112,11 +112,10 @@ namespace WebApplication2.Controllers
                 await connection.OpenAsync();
 
                 // Создаем команду для обновления данных в базе данных
-                using (var command = new NpgsqlCommand("UPDATE \"Стоянка\".\"Service\" SET \"Название\"=@Название, \"Описание\"=@Описание, \"Оплата\"=@Оплата, \"Стоимость\"=@Стоимость WHERE \"Код_услуги\" = @id;", connection))
+                using (var command = new NpgsqlCommand("UPDATE \"Стоянка\".\"Service\" SET \"Описание\"=@Описание, \"Оплата\"=@Оплата, \"Стоимость\"=@Стоимость WHERE \"Код_услуги\" = @id;", connection))
                 {
                     // Добавляем параметры в команду
                     command.Parameters.AddWithValue("id", id);
-                    command.Parameters.AddWithValue("Название", service.Название);
                     command.Parameters.AddWithValue("Описание", service.Описание);
                     command.Parameters.AddWithValue("Оплата", service.Оплата);
                     command.Parameters.AddWithValue("Стоимость", service.Стоимость);
