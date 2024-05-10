@@ -185,7 +185,6 @@ namespace WebApplication2.Controllers
                 }
             }
         }
-
         // Метод для удаления автомобиля
         [HttpDelete("{id}")]
         public async Task<IActionResult> Delete(int id)
@@ -194,26 +193,28 @@ namespace WebApplication2.Controllers
             await using (var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection")))
             {
                 await connection.OpenAsync();
+                try
                 {
-                    try
+                    // Создаем команду для удаления автомобиля
+                    await using (var command = new NpgsqlCommand("DELETE FROM \"Стоянка\".\"Auto\" WHERE Код_авто = @id;", connection))
                     {
-                        // Создаем команду для удаления автомобиля
-                        await using (var command = new NpgsqlCommand("DELETE FROM \"Стоянка\".\"Auto\" WHERE Код_авто = @id;", connection))
+                        // Добавляем параметр в команду
+                        command.Parameters.AddWithValue("id", id);
+                        // Выполняем команду
+                        int affectedRows = await command.ExecuteNonQueryAsync();
+                        if (affectedRows == 0)
                         {
-                            // Добавляем параметр в команду
-                            command.Parameters.AddWithValue("id", id);
-                            // Выполняем команду
-                            await command.ExecuteNonQueryAsync();
+                            // Если запись не найдена, возвращаем 404 Not Found
+                            return NotFound();
                         }
                         // Возвращаем статус 200 OK
                         return Ok();
                     }
-                    // Если произошла ошибка, откатываем транзакцию
-                    catch (Exception ex)
-                    {
-                        // Возвращаем статус 500 Internal Server Error
-                        return StatusCode(500, ex.Message);
-                    }
+                }
+                catch (NpgsqlException ex)
+                {
+                    // Возвращаем статус 500 Internal Server Error с описанием ошибки
+                    return StatusCode(500, $"Error deleting auto: {ex.Message}");
                 }
             }
         }

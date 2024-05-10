@@ -208,15 +208,20 @@ namespace WebApplication2.Controllers
                         // Добавляем параметр для идентификатора клиента
                         command.Parameters.AddWithValue("id", id);
                         // Выполняем команду
-                        await command.ExecuteNonQueryAsync();
+                        int affectedRows = await command.ExecuteNonQueryAsync();
+                        if (affectedRows == 0)
+                        {
+                            // Если запись не найдена, возвращаем 404 Not Found
+                            return NotFound();
+                        }
+                        // Возвращаем статус 200 OK
+                        return Ok();
                     }
-                    // Возвращаем код ответа 200 (OK)
-                    return Ok();
                 }
-                catch (Exception ex)
+                catch (NpgsqlException ex)
                 {
-                    // При ошибке возвращаем код ответа 500 (Internal Server Error) и сообщение об ошибке
-                    return StatusCode(500, ex.Message);
+                    // Возвращаем статус 500 Internal Server Error с описанием ошибки
+                    return StatusCode(500, $"Error deleting auto: {ex.Message}");
                 }
             }
         }
