@@ -28,7 +28,9 @@ namespace WebApplication2.Controllers
                              "FROM \"Стоянка\".\"Klients\" a " +
                              "JOIN \"Стоянка\".\"Sales\" c ON a.\"Код_клиента\" = c.\"Код_клиента\" " +
                              "JOIN \"Стоянка\".\"Auto\" b ON a.\"Код_авто\" = b.\"Код_авто\" " +
-                             "WHERE a.\"Код_клиента\" = @clientCode";
+                             "WHERE a.\"Код_клиента\" = @clientCode " +
+                             "ORDER BY c.\"Дата_выезда\" DESC " +
+                             "LIMIT 1";
                 using (var command = new NpgsqlCommand(sql, connection))
                 {
                     command.Parameters.AddWithValue("clientCode", clientCode);
@@ -82,7 +84,7 @@ namespace WebApplication2.Controllers
                     }
                 }
                 // Получаем информацию о услугах
-                sql = "SELECT \"Название_услуги\", \"Сумма\" FROM \"Стоянка\".\"Realisation\" WHERE \"Код_клиента\" = @clientCode";
+                sql = "SELECT Название_услуги, Сумма FROM Стоянка.\"Realisation\" WHERE Код_клиента = @clientCode and Дата_въезда between (select Дата_въезда from Стоянка.\"Sales\" where Код_клиента = @clientCode  order by \"Дата_въезда\" desc  limit 1) and (select Дата_выезда from Стоянка.\"Sales\" where Код_клиента = @clientCode order by \"Дата_выезда\" desc limit 1)";
                 using (var command3 = new NpgsqlCommand(sql, connection))
                 {
                     connection.Close(); // Закрываем соединение перед созданием новой команды

@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Example;
+using Microsoft.AspNetCore.Mvc;
 using Npgsql;
 using NpgsqlTypes;
 using WebApplication2.DB;
@@ -26,37 +27,51 @@ namespace WebApplication2.Controllers
                 return BadRequest("Не указаны параметры для поиска");
             }
 
-            var result = new List<Service>();
-
-            await using (var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection")))
+            try
             {
+                using var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection"));
                 await connection.OpenAsync();
 
-                // Создаем SQL-запрос с условием поиска по заданному столбцу и значению
-                await using (var command = new NpgsqlCommand($"SELECT * FROM \"Стоянка\".\"Service\" WHERE cast({columnName} as text) ilike @columnValue;", connection))
+                using var transaction = connection.BeginTransaction();
+
+                try
                 {
+                    // Создаем SQL-запрос с условием поиска по заданному столбцу и значению
+                    using var command = new NpgsqlCommand($"SELECT * FROM \"Стоянка\".\"Service\" WHERE cast({columnName} as text) ilike @columnValue;", connection);
                     command.Parameters.AddWithValue("columnValue", $"%{columnValue}%");
 
-                    await using (var reader = await command.ExecuteReaderAsync())
-                    {
-                        while (await reader.ReadAsync())
-                        {
-                            var service = new Service
-                            {
-                                Код_услуги = await reader.GetFieldValueAsync<int>(0),
-                                Название = await reader.GetFieldValueAsync<string>(1),
-                                Описание = await reader.GetFieldValueAsync<string>(2),
-                                Оплата = await reader.GetFieldValueAsync<string>(3),
-                                Стоимость = await reader.GetFieldValueAsync<int>(4),
-                            };
+                    var result = new List<Service>();
 
-                            result.Add(service);
-                        }
+                    using var reader = await command.ExecuteReaderAsync();
+                    while (await reader.ReadAsync())
+                    {
+                        var service = new Service
+                        {
+                            Код_услуги = await reader.GetFieldValueAsync<int>(0),
+                            Название = await reader.GetFieldValueAsync<string>(1),
+                            Описание = await reader.GetFieldValueAsync<string>(2),
+                            Оплата = await reader.GetFieldValueAsync<string>(3),
+                            Стоимость = await reader.GetFieldValueAsync<int>(4),
+                        };
+
+                        result.Add(service);
                     }
+
+                    transaction.Commit();
+
+                    return Ok(result); // Возвращаем найденные услуги в формате JSON
+                }
+                catch (Exception ex)
+                {
+                    transaction.Rollback();
+                    throw; // rethrow the exception
                 }
             }
-
-            return Ok(result); // Возвращаем найденные услуги в формате JSON
+            catch (Exception ex)
+            {
+                // log the exception
+                return StatusCode(500, "Ошибка при поиске услуг");
+            }
         }
 
         [HttpGet]
@@ -69,7 +84,10 @@ namespace WebApplication2.Controllers
             await using (var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection")))
             {
                 await connection.OpenAsync();
+                 using var transaction = connection.BeginTransaction();
 
+                try
+                {
                 // Выполняем SQL-запрос на выборку всех услуг из таблицы "Service"
                 await using (var command = new NpgsqlCommand("SELECT * FROM \"Стоянка\".\"Service\";", connection))
                 {
@@ -90,11 +108,17 @@ namespace WebApplication2.Controllers
                         }
                     }
                 }
+                    transaction.Commit();
+                }
+                catch (Exception ex)
+                {
+                    transaction.Rollback();
+                    throw;
+                }
             }
 
-            return Ok(result); // Возвращаем найденные услуги в формате JSON
+            return Ok(result); // Return found services in JSON format
         }
-
 
         [HttpPut("{id}")]
         public async Task<IActionResult> Put(int id, [FromBody] Service service)
@@ -110,9 +134,13 @@ namespace WebApplication2.Controllers
             {
                 // Открываем соединение
                 await connection.OpenAsync();
+                using var transaction = connection.BeginTransaction();
 
-                // Создаем команду для обновления данных в базе данных
-                using (var command = new NpgsqlCommand("UPDATE \"Стоянка\".\"Service\" SET \"Описание\"=@Описание, \"Оплата\"=@Оплата, \"Стоимость\"=@Стоимость WHERE \"Код_услуги\" = @id;", connection))
+                try
+                {
+
+                    // Создаем команду для обновления данных в базе данных
+                    using (var command = new NpgsqlCommand("UPDATE \"Стоянка\".\"Service\" SET \"Описание\"=@Описание, \"Оплата\"=@Оплата, \"Стоимость\"=@Стоимость WHERE \"Код_услуги\" = @id;", connection))
                 {
                     // Добавляем параметры в команду
                     command.Parameters.AddWithValue("id", id);
@@ -126,21 +154,24 @@ namespace WebApplication2.Controllers
                     // Если была обновлена одна строка, возвращаем статус Ok
                     if (rowsAffected == 1)
                     {
-                        return Ok();
+                            transaction.Commit();
+                            return Ok();
+                        }
+                        // If no rows were updated, return NotFound status
+                        else
+                        {
+                            transaction.Rollback();
+                            return NotFound();
+                        }
                     }
-                    // Если строк не было обновлено, возвращаем статус NotFound
-                    else
-                    {
-                        return NotFound();
-                    }
+                }
+                catch (Exception ex)
+                {
+                    transaction.Rollback();
+                    throw;
                 }
             }
         }
-
-
-
-
-
 
 
 

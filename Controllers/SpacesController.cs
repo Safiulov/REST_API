@@ -31,33 +31,44 @@ namespace WebApplication2.Controllers
             {
                 await connection.OpenAsync();
 
-                var commandText = $"SELECT * FROM \"Стоянка\".\"Spaces\" WHERE cast({columnName} as text) ILIKE @columnValue";
-                await using (var command = new NpgsqlCommand(commandText, connection))
+                // **Added transaction**
+                using (var transaction = connection.BeginTransaction())
                 {
-                    command.Parameters.Add(new NpgsqlParameter("columnValue", $"%{columnValue}%"));
-
-                    await using (var reader = await command.ExecuteReaderAsync())
+                    try
                     {
-                        while (await reader.ReadAsync())
+                        var commandText = $"SELECT * FROM \"Стоянка\".\"Spaces\" WHERE cast({columnName} as text) ILIKE @columnValue";
+                        await using (var command = new NpgsqlCommand(commandText, connection))
                         {
-                            var spaces = new Spaces
+                            command.Parameters.Add(new NpgsqlParameter("columnValue", $"%{columnValue}%"));
+
+                            await using (var reader = await command.ExecuteReaderAsync())
                             {
-                                Место = await reader.GetFieldValueAsync<string>(0),
-                                Статус = await reader.GetFieldValueAsync<string>(1),
+                                while (await reader.ReadAsync())
+                                {
+                                    var spaces = new Spaces
+                                    {
+                                        Место = await reader.GetFieldValueAsync<string>(0),
+                                        Статус = await reader.GetFieldValueAsync<string>(1),
+                                    };
 
-                            };
-
-                            result.Add(spaces);
+                                    result.Add(spaces);
+                                }
+                            }
                         }
+
+                        transaction.Commit(); // Commit the transaction
+                        return Ok(result);
+                    }
+                    catch (Exception ex)
+                    {
+                        transaction.Rollback(); // Rollback the transaction on error
+                        throw; // Rethrow the exception
                     }
                 }
             }
-
-            return Ok(result);
         }
 
         [HttpGet]
-       
         public async Task<IActionResult> Get()
         {
             var result = new List<Spaces>();
@@ -65,31 +76,40 @@ namespace WebApplication2.Controllers
             await using (var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection")))
             {
                 await connection.OpenAsync();
-                await using (var command = new NpgsqlCommand("SELECT * FROM \"Стоянка\".\"Spaces\";", connection))
+
+                // **Added transaction**
+                using (var transaction = connection.BeginTransaction())
                 {
-                    await using (var reader = await command.ExecuteReaderAsync())
+                    try
                     {
-                        while (await reader.ReadAsync())
+                        await using (var command = new NpgsqlCommand("SELECT * FROM \"Стоянка\".\"Spaces\";", connection))
                         {
-                            var spaces = new Spaces
+                            await using (var reader = await command.ExecuteReaderAsync())
                             {
-                                Место = await reader.GetFieldValueAsync<string>(0),
-                                Статус = await reader.GetFieldValueAsync<string>(1),
+                                while (await reader.ReadAsync())
+                                {
+                                    var spaces = new Spaces
+                                    {
+                                        Место = await reader.GetFieldValueAsync<string>(0),
+                                        Статус = await reader.GetFieldValueAsync<string>(1),
+                                    };
 
-
-
-                            };
-
-                            result.Add(spaces);
+                                    result.Add(spaces);
+                                }
+                            }
                         }
+
+                        transaction.Commit(); // Commit the transaction
+                        return Ok(result);
+                    }
+                    catch (Exception ex)
+                    {
+                        transaction.Rollback(); // Rollback the transaction on error
+                        throw; // Rethrow the exception
                     }
                 }
             }
-
-            return Ok(result);
         }
-
-
 
 
 
@@ -104,17 +124,31 @@ namespace WebApplication2.Controllers
             await using (var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection")))
             {
                 await connection.OpenAsync();
-                await using (var command = new NpgsqlCommand("INSERT INTO \"Стоянка\".\"Spaces\"(\"Место\") VALUES (@Место);", connection))
+
+                // **Added transaction**
+                using (var transaction = connection.BeginTransaction())
                 {
-                    command.Parameters.AddWithValue("Место", spaces.Место);
-                    int rowsAffected = await command.ExecuteNonQueryAsync();
-                    if (rowsAffected == 1)
+                    try
                     {
-                        return Ok();
+                        await using (var command = new NpgsqlCommand("INSERT INTO \"Стоянка\".\"Spaces\"(\"Место\") VALUES (@Место);", connection))
+                        {
+                            command.Parameters.AddWithValue("Место", spaces.Место);
+                            int rowsAffected = await command.ExecuteNonQueryAsync();
+                            if (rowsAffected == 1)
+                            {
+                                transaction.Commit(); // Commit the transaction
+                                return Ok();
+                            }
+                            else
+                            {
+                                return BadRequest(ModelState);
+                            }
+                        }
                     }
-                    else
+                    catch (Exception ex)
                     {
-                        return BadRequest(ModelState);
+                        transaction.Rollback(); // Rollback the transaction on error
+                        throw; // Rethrow the exception
                     }
                 }
             }
@@ -128,18 +162,32 @@ namespace WebApplication2.Controllers
             await using (var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection")))
             {
                 await connection.OpenAsync();
-                await using (var command = new NpgsqlCommand("DELETE FROM \"Стоянка\".\"Spaces\" WHERE \"Место\" = @id;", connection))
-                {
 
-                    command.Parameters.AddWithValue("id", id);
-                    int rowsAffected = await command.ExecuteNonQueryAsync();
-                    if (rowsAffected > 0)
+                // **Added transaction**
+                using (var transaction = connection.BeginTransaction())
+                {
+                    try
                     {
-                        return Ok();
+                        await using (var command = new NpgsqlCommand("DELETE FROM \"Стоянка\".\"Spaces\" WHERE \"Место\" = @id;", connection))
+                        {
+
+                            command.Parameters.AddWithValue("id", id);
+                            int rowsAffected = await command.ExecuteNonQueryAsync();
+                            if (rowsAffected > 0)
+                            {
+                                transaction.Commit(); // Commit the transaction
+                                return Ok();
+                            }
+                            else
+                            {
+                                return NotFound();
+                            }
+                        }
                     }
-                    else
+                    catch (Exception ex)
                     {
-                        return NotFound();
+                        transaction.Rollback(); // Rollback the transaction on error
+                        throw; // Rethrow the exception
                     }
                 }
             }
@@ -149,22 +197,35 @@ namespace WebApplication2.Controllers
 
         [HttpDelete]
         [Route("Delete_All")]
-        public async Task<IActionResult> DeleteAll(int id)
+        public async Task<IActionResult> DeleteAll()
         {
             await using (var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection")))
             {
                 await connection.OpenAsync();
-                await using (var command = new NpgsqlCommand("DELETE FROM \"Стоянка\".\"Spaces\";", connection))
-                {
-                    int rowsAffected = await command.ExecuteNonQueryAsync();
 
-                    if (rowsAffected > 0)
+                // **Added transaction**
+                using (var transaction = connection.BeginTransaction())
+                {
+                    try
                     {
-                        return Ok();
+                        await using (var command = new NpgsqlCommand("DELETE FROM \"Стоянка\".\"Spaces\";", connection))
+                        {
+                            int rowsAffected = await command.ExecuteNonQueryAsync();
+                            if (rowsAffected > 0)
+                            {
+                                transaction.Commit(); // Commit the transaction
+                                return Ok();
+                            }
+                            else
+                            {
+                                return NotFound();
+                            }
+                        }
                     }
-                    else
+                    catch (Exception ex)
                     {
-                        return NotFound();
+                        transaction.Rollback(); // Rollback the transaction on error
+                        throw; // Rethrow the exception
                     }
                 }
             }

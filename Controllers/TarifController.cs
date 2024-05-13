@@ -24,30 +24,45 @@ namespace WebApplication2.Controllers
             {
                 return BadRequest("Не указаны параметры для поиска");
             }
+
             var result = new List<Tarifs>();
 
             await using (var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection")))
             {
                 await connection.OpenAsync();
-                await using (var command = new NpgsqlCommand($"SELECT * FROM \"Стоянка\".\"Tarifs\" WHERE cast({columnName} as text) ilike @columnValue", connection))
+
+                // **Added transaction**
+                using (var transaction = connection.BeginTransaction())
                 {
-                    command.Parameters.Add(new NpgsqlParameter("columnValue", $"%{columnValue}%"));
-                    await using (var reader = await command.ExecuteReaderAsync())
+                    try
                     {
-                        while (await reader.ReadAsync())
+                        await using (var command = new NpgsqlCommand($"SELECT * FROM \"Стоянка\".\"Tarifs\" WHERE cast({columnName} as text) ilike @columnValue", connection))
                         {
-                            var tarifs = new Tarifs
+                            command.Parameters.Add(new NpgsqlParameter("columnValue", $"%{columnValue}%"));
+                            await using (var reader = await command.ExecuteReaderAsync())
                             {
-                                Код_тарифа = await reader.GetFieldValueAsync<int>(0),
-                                Название = await reader.GetFieldValueAsync<string>(1),
-                                Условие = await reader.GetFieldValueAsync<string>(2),
-                                Время_действия = await reader.GetFieldValueAsync<string>(3),
-                                Стоимость = reader.IsDBNull(4) ? null : await reader.GetFieldValueAsync<int>(4),
+                                while (await reader.ReadAsync())
+                                {
+                                    var tarifs = new Tarifs
+                                    {
+                                        Код_тарифа = await reader.GetFieldValueAsync<int>(0),
+                                        Название = await reader.GetFieldValueAsync<string>(1),
+                                        Условие = await reader.GetFieldValueAsync<string>(2),
+                                        Время_действия = await reader.GetFieldValueAsync<string>(3),
+                                        Стоимость = reader.IsDBNull(4) ? null : await reader.GetFieldValueAsync<int>(4),
+                                    };
 
-                            };
-
-                            result.Add(tarifs);
+                                    result.Add(tarifs);
+                                }
+                            }
                         }
+
+                        transaction.Commit(); // Commit the transaction
+                    }
+                    catch (Exception ex)
+                    {
+                        transaction.Rollback(); // Rollback the transaction on error
+                        throw; // Rethrow the exception
                     }
                 }
             }
@@ -56,7 +71,6 @@ namespace WebApplication2.Controllers
         }
 
         [HttpGet]
-      
         public async Task<IActionResult> Get()
         {
             var result = new List<Tarifs>();
@@ -64,25 +78,38 @@ namespace WebApplication2.Controllers
             await using (var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection")))
             {
                 await connection.OpenAsync();
-                await using (var command = new NpgsqlCommand("SELECT * FROM \"Стоянка\".\"Tarifs\";", connection))
+
+                // **Added transaction**
+                using (var transaction = connection.BeginTransaction())
                 {
-                    await using (var reader = await command.ExecuteReaderAsync())
+                    try
                     {
-                        while (await reader.ReadAsync())
+                        await using (var command = new NpgsqlCommand("SELECT * FROM \"Стоянка\".\"Tarifs\";", connection))
                         {
-                            var tarifs = new Tarifs
+                            await using (var reader = await command.ExecuteReaderAsync())
                             {
-                                Код_тарифа = await reader.GetFieldValueAsync<int>(0),
-                                Название = await reader.GetFieldValueAsync<string>(1),
-                                Условие = await reader.GetFieldValueAsync<string>(2),
-                                Время_действия = await reader.GetFieldValueAsync<string>(3),
-                                Стоимость = reader.IsDBNull(4) ? null : await reader.GetFieldValueAsync<int>(4),
+                                while (await reader.ReadAsync())
+                                {
+                                    var tarifs = new Tarifs
+                                    {
+                                        Код_тарифа = await reader.GetFieldValueAsync<int>(0),
+                                        Название = await reader.GetFieldValueAsync<string>(1),
+                                        Условие = await reader.GetFieldValueAsync<string>(2),
+                                        Время_действия = await reader.GetFieldValueAsync<string>(3),
+                                        Стоимость = reader.IsDBNull(4) ? null : await reader.GetFieldValueAsync<int>(4),
+                                    };
 
-
-                            };
-
-                            result.Add(tarifs);
+                                    result.Add(tarifs);
+                                }
+                            }
                         }
+
+                        transaction.Commit(); // Commit the transaction
+                    }
+                    catch (Exception ex)
+                    {
+                        transaction.Rollback(); // Rollback the transaction on error
+                        throw; // Rethrow the exception
                     }
                 }
             }
@@ -102,31 +129,40 @@ namespace WebApplication2.Controllers
             await using (var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection")))
             {
                 await connection.OpenAsync();
-                await using (var command = new NpgsqlCommand("UPDATE \"Стоянка\".\"Tarifs\" SET \"Условие\"=@Условие, \"Время_действия\"=@Время_действия, \"Стоимость\"=@Стоимость WHERE \"Код_тарифа\" = @id;", connection))
+
+                // **Added transaction**
+                using (var transaction = connection.BeginTransaction())
                 {
-
-
-                    command.Parameters.AddWithValue("id", id);
-
-                    command.Parameters.AddWithValue("Условие", tarifs.Условие);
-                    command.Parameters.AddWithValue("Время_действия", tarifs.Время_действия);
-                    command.Parameters.AddWithValue("Стоимость", tarifs.Стоимость);
-
-
-                    int rowsAffected = await command.ExecuteNonQueryAsync();
-
-                    if (rowsAffected == 1)
+                    try
                     {
-                        return Ok();
+                        await using (var command = new NpgsqlCommand("UPDATE \"Стоянка\".\"Tarifs\" SET \"Условие\"=@Условие, \"Время_действия\"=@Время_действия, \"Стоимость\"=@Стоимость WHERE \"Код_тарифа\" = @id;", connection))
+                        {
+                            command.Parameters.AddWithValue("id", id);
+                            command.Parameters.AddWithValue("Условие", tarifs.Условие);
+                            command.Parameters.AddWithValue("Время_действия", tarifs.Время_действия);
+                            command.Parameters.AddWithValue("Стоимость", tarifs.Стоимость);
+
+                            int rowsAffected = await command.ExecuteNonQueryAsync();
+
+                            if (rowsAffected == 1)
+                            {
+                                transaction.Commit(); // Commit the transaction
+                                return Ok();
+                            }
+                            else
+                            {
+                                return NotFound();
+                            }
+                        }
                     }
-                    else
+                    catch (Exception ex)
                     {
-                        return NotFound();
+                        transaction.Rollback(); // Rollback the transaction on error
+                        throw; // Rethrow the exception
                     }
                 }
             }
         }
-
 
 
 
