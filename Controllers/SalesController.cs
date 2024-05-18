@@ -1,13 +1,12 @@
 ﻿using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Configuration;
 using Npgsql;
-using NpgsqlTypes;
-using WebApplication2.DB;
+using WebApplication1.DB;
 
-namespace WebApplication2.Controllers
+namespace WebApplication1.Controllers
 {
     [ApiController]
     [Route("api/Sales")]
+    [RequireHttps]
     public class SalesController : Controller
     {
         private readonly IConfiguration _databaseService;
@@ -30,52 +29,44 @@ namespace WebApplication2.Controllers
                 return BadRequest("Не указаны параметры для поиска");
             }
 
-            using (var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection")))
+            using var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection"));
+            await connection.OpenAsync();
+
+            using var transaction = connection.BeginTransaction();
+            try
             {
-                await connection.OpenAsync();
+                // Формируем SQL-запрос для поиска продаж по указанному столбцу и значению
+                string sql = $"SELECT * from \"Стоянка\".\"Sales\" WHERE cast({columnName} as text) ilike '%{columnValue}%';";
+                await using var command = new NpgsqlCommand(sql, connection, transaction);
+                await using var reader = await command.ExecuteReaderAsync();
+                var result = new List<Sales>();
 
-                using (var transaction = connection.BeginTransaction())
+                while (await reader.ReadAsync())
                 {
-                    try
+                    var sales = new Sales
                     {
-                        // Формируем SQL-запрос для поиска продаж по указанному столбцу и значению
-                        string sql = $"SELECT * from \"Стоянка\".\"Sales\" WHERE cast({columnName} as text) ilike '%{columnValue}%';";
-                        await using (var command = new NpgsqlCommand(sql, connection, transaction))
-                        {
-                            await using (var reader = await command.ExecuteReaderAsync())
-                            {
-                                var result = new List<Sales>();
+                        Код = await reader.GetFieldValueAsync<int>(0), // Код продажи
+                        Дата_въезда = await reader.GetFieldValueAsync<DateTime>(1), // Дата въезда автомобиля
+                        Дата_выезда = reader.IsDBNull(2) ? null : await reader.GetFieldValueAsync<DateTime>(2), // Дата выезда автомобиля (может быть null, если автомобиль еще не покинул стоянку)
+                        Тариф = reader.IsDBNull(3) ? null : await reader.GetFieldValueAsync<int>(3), // Тариф за 1 час стоянки
+                        Время_стоянки = reader.IsDBNull(4) ? null : await reader.GetFieldValueAsync<int>(4), // Время стоянки в часах
+                        Стоимость = reader.IsDBNull(5) ? null : await reader.GetFieldValueAsync<int>(5), // Стоимость стоянки
+                        Место = await reader.GetFieldValueAsync<string>(6), // Номер места на стоянке
+                        Код_клиента = await reader.GetFieldValueAsync<int>(7), // Код клиента, совершившего продажу
+                        ФИО = await reader.GetFieldValueAsync<string>(8), // ФИО клиента
+                        Госномер = await reader.GetFieldValueAsync<string>(9) // Государственный номер автомобиля
+                    };
 
-                                while (await reader.ReadAsync())
-                                {
-                                    var sales = new Sales
-                                    {
-                                        Код = await reader.GetFieldValueAsync<int>(0), // Код продажи
-                                        Дата_въезда = await reader.GetFieldValueAsync<DateTime>(1), // Дата въезда автомобиля
-                                        Дата_выезда = reader.IsDBNull(2) ? null : await reader.GetFieldValueAsync<DateTime>(2), // Дата выезда автомобиля (может быть null, если автомобиль еще не покинул стоянку)
-                                        Тариф = reader.IsDBNull(3) ? null : await reader.GetFieldValueAsync<int>(3), // Тариф за 1 час стоянки
-                                        Время_стоянки = reader.IsDBNull(4) ? null : await reader.GetFieldValueAsync<int>(4), // Время стоянки в часах
-                                        Стоимость = reader.IsDBNull(5) ? null : await reader.GetFieldValueAsync<int>(5), // Стоимость стоянки
-                                        Место = await reader.GetFieldValueAsync<string>(6), // Номер места на стоянке
-                                        Код_клиента = await reader.GetFieldValueAsync<int>(7), // Код клиента, совершившего продажу
-                                        ФИО = await reader.GetFieldValueAsync<string>(8), // ФИО клиента
-                                        Госномер = await reader.GetFieldValueAsync<string>(9) // Государственный номер автомобиля
-                                    };
-
-                                    result.Add(sales);
-                                }
-
-                                transaction.Commit();
-                                return Ok(result); // Возвращаем найденные продажи в формате JSON
-                            }
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        transaction.Rollback();
-                        throw; // rethrow the exception
-                    }
+                    result.Add(sales);
                 }
+
+                transaction.Commit();
+                return Ok(result); // Возвращаем найденные продажи в формате JSON
+            }
+            catch (Exception)
+            {
+                transaction.Rollback();
+                throw; // rethrow the exception
             }
         }
 
@@ -86,49 +77,43 @@ namespace WebApplication2.Controllers
         {
             var result = new List<Sales>();
 
-            await using (var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection")))
+            await using var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection"));
+            await connection.OpenAsync();
+
+            using var transaction = connection.BeginTransaction();
+            try
             {
-                await connection.OpenAsync();
+                // Выполняем SQL-запрос для получения всех продаж из таблицы "Стоянка"."Sales"
+                const string sql = "SELECT * FROM \"Стоянка\".\"Sales\";";
 
-                using (var transaction = connection.BeginTransaction())
+                await using (var command = new NpgsqlCommand(sql, connection, transaction))
                 {
-                    try
+                    await using var reader = await command.ExecuteReaderAsync();
+                    while (await reader.ReadAsync())
                     {
-                        // Выполняем SQL-запрос для получения всех продаж из таблицы "Стоянка"."Sales"
-                        const string sql = "SELECT * FROM \"Стоянка\".\"Sales\";";
-
-                        await using (var command = new NpgsqlCommand(sql, connection, transaction))
+                        result.Add(new Sales
                         {
-                            await using (var reader = await command.ExecuteReaderAsync())
-                            {
-                                while (await reader.ReadAsync())
-                                {
-                                    result.Add(new Sales
-                                    {
-                                        Код = reader.GetInt32(0), // Код продажи
-                                        Дата_въезда = reader.GetDateTime(1), // Дата въезда автомобиля
-                                        Дата_выезда = reader.IsDBNull(2) ? (DateTime?)null : reader.GetDateTime(2), // Дата выезда автомобиля (может быть null, если автомобиль еще не покинул стоянку)
-                                        Тариф = reader.IsDBNull(3) ? (int?)null : reader.GetInt32(3), // Тариф за 1 час стоянки
-                                        Время_стоянки = reader.IsDBNull(4) ? (int?)null : reader.GetInt32(4), // Время стоянки в часах
-                                        Стоимость = reader.IsDBNull(5) ? (int?)null : reader.GetInt32(5), // Стоимость стоянки
-                                        Место = reader.GetString(6), // Номер места на стоянке
-                                        Код_клиента = reader.GetInt32(7), // Код клиента, совершившего продажу
-                                        ФИО = reader.GetString(8), // ФИО клиента
-                                        Госномер = reader.GetString(9) // Государственный номер автомобиля
-                                    });
-                                }
-                            }
-                        }
-
-                        transaction.Commit();
-                        return Ok(result); // Возвращаем список всех продаж в формате JSON
-                    }
-                    catch (Exception ex)
-                    {
-                        transaction.Rollback();
-                        throw; // rethrow the exception
+                            Код = reader.GetInt32(0), // Код продажи
+                            Дата_въезда = reader.GetDateTime(1), // Дата въезда автомобиля
+                            Дата_выезда = reader.IsDBNull(2) ? (DateTime?)null : reader.GetDateTime(2), // Дата выезда автомобиля (может быть null, если автомобиль еще не покинул стоянку)
+                            Тариф = reader.IsDBNull(3) ? (int?)null : reader.GetInt32(3), // Тариф за 1 час стоянки
+                            Время_стоянки = reader.IsDBNull(4) ? (int?)null : reader.GetInt32(4), // Время стоянки в часах
+                            Стоимость = reader.IsDBNull(5) ? (int?)null : reader.GetInt32(5), // Стоимость стоянки
+                            Место = reader.GetString(6), // Номер места на стоянке
+                            Код_клиента = reader.GetInt32(7), // Код клиента, совершившего продажу
+                            ФИО = reader.GetString(8), // ФИО клиента
+                            Госномер = reader.GetString(9) // Государственный номер автомобиля
+                        });
                     }
                 }
+
+                transaction.Commit();
+                return Ok(result); // Возвращаем список всех продаж в формате JSON
+            }
+            catch (Exception)
+            {
+                transaction.Rollback();
+                throw; // rethrow the exception
             }
         }
 
@@ -142,33 +127,29 @@ namespace WebApplication2.Controllers
                 return BadRequest(ModelState);
             }
 
-            await using (var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection")))
+            await using var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection"));
+            await connection.OpenAsync();
+
+            // Формируем SQL-запрос для обновления данных продажи по указанному идентификатору
+            await using var command = new NpgsqlCommand("UPDATE \"Стоянка\".\"Sales\" SET \"Дата_въезда\"=@Дата_въезда, \"Дата_выезда\"=@Дата_выезда, \"Место\"=@Место, \"Код_клиента\"=@Код_клиента WHERE \"Код\" = @id;", connection);
+            command.Parameters.AddWithValue("id", id);
+            command.Parameters.AddWithValue("Дата_въезда", sales.Дата_въезда);
+            if (sales.Дата_выезда != null)
+                command.Parameters.AddWithValue("Дата_выезда", sales.Дата_выезда);
+            else
+                command.Parameters.AddWithValue("Дата_выезда", DBNull.Value);
+            command.Parameters.AddWithValue("Место", sales.Место);
+            command.Parameters.AddWithValue("Код_клиента", sales.Код_клиента);
+
+            int rowsAffected = await command.ExecuteNonQueryAsync();
+
+            if (rowsAffected == 1)
             {
-                await connection.OpenAsync();
-
-                // Формируем SQL-запрос для обновления данных продажи по указанному идентификатору
-                await using (var command = new NpgsqlCommand("UPDATE \"Стоянка\".\"Sales\" SET \"Дата_въезда\"=@Дата_въезда, \"Дата_выезда\"=@Дата_выезда, \"Место\"=@Место, \"Код_клиента\"=@Код_клиента WHERE \"Код\" = @id;", connection))
-                {
-                    command.Parameters.AddWithValue("id", id);
-                    command.Parameters.AddWithValue("Дата_въезда", sales.Дата_въезда);
-                    if (sales.Дата_выезда != null)
-                        command.Parameters.AddWithValue("Дата_выезда", sales.Дата_выезда);
-                    else
-                        command.Parameters.AddWithValue("Дата_выезда", DBNull.Value);
-                    command.Parameters.AddWithValue("Место", sales.Место);
-                    command.Parameters.AddWithValue("Код_клиента", sales.Код_клиента);
-
-                    int rowsAffected = await command.ExecuteNonQueryAsync();
-
-                    if (rowsAffected == 1)
-                    {
-                        return Ok(); // Если обновлено 1 запись, возвращаем код 200 (OK)
-                    }
-                    else
-                    {
-                        return NotFound(); // Если не обновлено ни одной записи, возвращаем код 404 (Not Found)
-                    }
-                }
+                return Ok(); // Если обновлено 1 запись, возвращаем код 200 (OK)
+            }
+            else
+            {
+                return NotFound(); // Если не обновлено ни одной записи, возвращаем код 404 (Not Found)
             }
         }
 
@@ -239,7 +220,7 @@ namespace WebApplication2.Controllers
                     return BadRequest(ModelState);
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 transaction.Rollback();
                 throw;
@@ -260,25 +241,23 @@ namespace WebApplication2.Controllers
             try
             {
                 // Формируем SQL-запрос для удаления продажи по указанному идентификатору
-                await using (var command = new NpgsqlCommand("DELETE FROM \"Стоянка\".\"Sales\" WHERE \"Код\" = @id;", connection))
+                await using var command = new NpgsqlCommand("DELETE FROM \"Стоянка\".\"Sales\" WHERE \"Код\" = @id;", connection);
+                command.Parameters.AddWithValue("id", id);
+
+                int rowsAffected = await command.ExecuteNonQueryAsync();
+
+                if (rowsAffected == 1)
                 {
-                    command.Parameters.AddWithValue("id", id);
-
-                    int rowsAffected = await command.ExecuteNonQueryAsync();
-
-                    if (rowsAffected == 1)
-                    {
-                        transaction.Commit();
-                        return Ok(); // Если удалена 1 запись, возвращаем код 200 (OK)
-                    }
-                    else
-                    {
-                        transaction.Rollback();
-                        return NotFound(); // Если не удалена ни одна запись, возвращаем код 404 (Not Found)
-                    }
+                    transaction.Commit();
+                    return Ok(); // Если удалена 1 запись, возвращаем код 200 (OK)
+                }
+                else
+                {
+                    transaction.Rollback();
+                    return NotFound(); // Если не удалена ни одна запись, возвращаем код 404 (Not Found)
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 transaction.Rollback();
                 throw;

@@ -1,12 +1,12 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Npgsql;
-using NpgsqlTypes;
-using WebApplication2.DB;
+using WebApplication1.DB;
 
-namespace WebApplication2.Controllers
+namespace WebApplication1.Controllers
 {
     [ApiController]
     [Route("api/Spaces")]
+    [RequireHttps]
     public class SpacesController : Controller
     {
         private readonly IConfiguration _databaseService;

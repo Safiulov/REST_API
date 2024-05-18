@@ -1,4 +1,4 @@
-﻿namespace WebApplication2
+﻿namespace WebApplication1.DB
 {
     public class Spaces
     {

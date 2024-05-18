@@ -1,13 +1,12 @@
-﻿using Example;
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using Npgsql;
-using NpgsqlTypes;
-using WebApplication2.DB;
+using WebApplication1.DB;
 
-namespace WebApplication2.Controllers
+namespace WebApplication1.Controllers
 {
     [ApiController]
     [Route("api/Service")]
+    [RequireHttps]
     public class ServiceController : Controller
     {
         private readonly IConfiguration _databaseService;
@@ -61,13 +60,13 @@ namespace WebApplication2.Controllers
 
                     return Ok(result); // Возвращаем найденные услуги в формате JSON
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
                     transaction.Rollback();
                     throw; // rethrow the exception
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 // log the exception
                 return StatusCode(500, "Ошибка при поиске услуг");
@@ -91,8 +90,7 @@ namespace WebApplication2.Controllers
                 // Выполняем SQL-запрос на выборку всех услуг из таблицы "Service"
                 await using (var command = new NpgsqlCommand("SELECT * FROM \"Стоянка\".\"Service\";", connection))
                 {
-                    await using (var reader = await command.ExecuteReaderAsync())
-                    {
+                        await using var reader = await command.ExecuteReaderAsync();
                         while (await reader.ReadAsync())
                         {
                             var service = new Service
@@ -107,10 +105,9 @@ namespace WebApplication2.Controllers
                             result.Add(service);
                         }
                     }
-                }
                     transaction.Commit();
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
                     transaction.Rollback();
                     throw;
@@ -130,46 +127,42 @@ namespace WebApplication2.Controllers
             }
 
             // Устанавливаем соединение с базой данных
-            await using (var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection")))
+            await using var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection"));
+            // Открываем соединение
+            await connection.OpenAsync();
+            using var transaction = connection.BeginTransaction();
+
+            try
             {
-                // Открываем соединение
-                await connection.OpenAsync();
-                using var transaction = connection.BeginTransaction();
 
-                try
+                // Создаем команду для обновления данных в базе данных
+                using var command = new NpgsqlCommand("UPDATE \"Стоянка\".\"Service\" SET \"Описание\"=@Описание, \"Оплата\"=@Оплата, \"Стоимость\"=@Стоимость WHERE \"Код_услуги\" = @id;", connection);
+                // Добавляем параметры в команду
+                command.Parameters.AddWithValue("id", id);
+                command.Parameters.AddWithValue("Описание", service.Описание);
+                command.Parameters.AddWithValue("Оплата", service.Оплата);
+                command.Parameters.AddWithValue("Стоимость", service.Стоимость);
+
+                // Выполняем команду и получаем количество затронутых строк
+                int rowsAffected = await command.ExecuteNonQueryAsync();
+
+                // Если была обновлена одна строка, возвращаем статус Ok
+                if (rowsAffected == 1)
                 {
-
-                    // Создаем команду для обновления данных в базе данных
-                    using (var command = new NpgsqlCommand("UPDATE \"Стоянка\".\"Service\" SET \"Описание\"=@Описание, \"Оплата\"=@Оплата, \"Стоимость\"=@Стоимость WHERE \"Код_услуги\" = @id;", connection))
-                {
-                    // Добавляем параметры в команду
-                    command.Parameters.AddWithValue("id", id);
-                    command.Parameters.AddWithValue("Описание", service.Описание);
-                    command.Parameters.AddWithValue("Оплата", service.Оплата);
-                    command.Parameters.AddWithValue("Стоимость", service.Стоимость);
-
-                    // Выполняем команду и получаем количество затронутых строк
-                    int rowsAffected = await command.ExecuteNonQueryAsync();
-
-                    // Если была обновлена одна строка, возвращаем статус Ok
-                    if (rowsAffected == 1)
-                    {
-                            transaction.Commit();
-                            return Ok();
-                        }
-                        // If no rows were updated, return NotFound status
-                        else
-                        {
-                            transaction.Rollback();
-                            return NotFound();
-                        }
-                    }
+                    transaction.Commit();
+                    return Ok();
                 }
-                catch (Exception ex)
+                // If no rows were updated, return NotFound status
+                else
                 {
                     transaction.Rollback();
-                    throw;
+                    return NotFound();
                 }
+            }
+            catch (Exception)
+            {
+                transaction.Rollback();
+                throw;
             }
         }
 

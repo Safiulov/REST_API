@@ -1,14 +1,13 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Npgsql;
-using System;
-using System.Data.SqlClient;
-using WebApplication2.DB;
-using static Microsoft.EntityFrameworkCore.DbLoggerCategory.Database;
+using WebApplication1.DB;
 
-namespace WebApplication2.Controllers
+
+namespace WebApplication1.Controllers
 {
     [ApiController]
     [Route("api/Site")]
+    [RequireHttps]
     public class SiteController : Controller
     {
         private readonly IConfiguration _databaseService;
@@ -35,43 +34,39 @@ namespace WebApplication2.Controllers
             {
                 await connection.OpenAsync();
 
-                using (var transaction = connection.BeginTransaction())
+                using var transaction = connection.BeginTransaction();
+                try
                 {
-                    try
+                    using (var command = new NpgsqlCommand($"SELECT k.\"ФИО\",k.\"Почта\",k.\"Логин\",k.\"Пароль\", a.\"Марка\",a.\"Цвет\",a.\"Тип\",a.\"Госномер\",a.\"Год\" FROM \"Стоянка\".\"Klients\" as k JOIN \"Стоянка\".\"Auto\" as a ON k.\"Код_авто\" = a.\"Код_авто\" WHERE \"Логин\" = @columnValue;", connection))
                     {
-                        using (var command = new NpgsqlCommand($"SELECT k.\"ФИО\",k.\"Почта\",k.\"Логин\",k.\"Пароль\", a.\"Марка\",a.\"Цвет\",a.\"Тип\",a.\"Госномер\",a.\"Год\" FROM \"Стоянка\".\"Klients\" as k JOIN \"Стоянка\".\"Auto\" as a ON k.\"Код_авто\" = a.\"Код_авто\" WHERE \"Логин\" = @columnValue;", connection))
+                        command.Parameters.AddWithValue("@columnValue", columnValue);
+
+                        await using var reader = await command.ExecuteReaderAsync();
+                        while (await reader.ReadAsync())
                         {
-                            command.Parameters.AddWithValue("@columnValue", columnValue);
-
-                            await using (var reader = await command.ExecuteReaderAsync())
+                            var auto = new AutoClientDto
                             {
-                                while (await reader.ReadAsync())
-                                {
-                                    var auto = new AutoClientDto
-                                    {
-                                        FIO = await reader.GetFieldValueAsync<string>(0),
-                                        Email = await reader.GetFieldValueAsync<string>(1),
-                                        Login = await reader.GetFieldValueAsync<string>(2),
-                                        Password = await reader.GetFieldValueAsync<string>(3),
-                                        Mark = await reader.GetFieldValueAsync<string>(4),
-                                        Color = await reader.GetFieldValueAsync<string>(5),
-                                        Type = await reader.GetFieldValueAsync<string>(6),
-                                        GovernmentNumber = await reader.GetFieldValueAsync<string>(7),
-                                        Year = await reader.GetFieldValueAsync<int>(8)
-                                    };
+                                FIO = await reader.GetFieldValueAsync<string>(0),
+                                Email = await reader.GetFieldValueAsync<string>(1),
+                                Login = await reader.GetFieldValueAsync<string>(2),
+                                Password = await reader.GetFieldValueAsync<string>(3),
+                                Mark = await reader.GetFieldValueAsync<string>(4),
+                                Color = await reader.GetFieldValueAsync<string>(5),
+                                Type = await reader.GetFieldValueAsync<string>(6),
+                                GovernmentNumber = await reader.GetFieldValueAsync<string>(7),
+                                Year = await reader.GetFieldValueAsync<int>(8)
+                            };
 
-                                    result.Add(auto);
-                                }
-                            }
+                            result.Add(auto);
                         }
+                    }
 
-                        transaction.Commit();
-                    }
-                    catch (Exception ex)
-                    {
-                        transaction.Rollback();
-                        throw;
-                    }
+                    transaction.Commit();
+                }
+                catch (Exception)
+                {
+                    transaction.Rollback();
+                    throw;
                 }
             }
 
@@ -95,41 +90,37 @@ namespace WebApplication2.Controllers
             {
                 connection.Open();
 
-                using (var transaction = connection.BeginTransaction())
+                using var transaction = connection.BeginTransaction();
+                try
                 {
-                    try
+                    using (var command = new NpgsqlCommand($"SELECT * FROM \"Стоянка\".\"Klients\" WHERE \"Логин\" = @columnValue;", connection))
                     {
-                        using (var command = new NpgsqlCommand($"SELECT * FROM \"Стоянка\".\"Klients\" WHERE \"Логин\" = @columnValue;", connection))
+                        command.Parameters.AddWithValue("@columnValue", columnValue);
+
+                        using var reader = command.ExecuteReader();
+                        while (reader.Read())
                         {
-                            command.Parameters.AddWithValue("@columnValue", columnValue);
-
-                            using (var reader = command.ExecuteReader())
+                            var klients = new Klients
                             {
-                                while (reader.Read())
-                                {
-                                    var klients = new Klients
-                                    {
-                                        Код_клиента = reader.GetFieldValue<int>(0),
-                                        ФИО = reader.GetFieldValue<string>(1),
-                                        Дата_рождения = reader.GetFieldValue<DateTime>(2),
-                                        Почта = reader.GetFieldValue<string>(3),
-                                        Логин = reader.GetFieldValue<string>(4),
-                                        Пароль = reader.GetFieldValue<string>(5),
-                                        Код_авто = reader.GetFieldValue<int>(6)
-                                    };
+                                Код_клиента = reader.GetFieldValue<int>(0),
+                                ФИО = reader.GetFieldValue<string>(1),
+                                Дата_рождения = reader.GetFieldValue<DateTime>(2),
+                                Почта = reader.GetFieldValue<string>(3),
+                                Логин = reader.GetFieldValue<string>(4),
+                                Пароль = reader.GetFieldValue<string>(5),
+                                Код_авто = reader.GetFieldValue<int>(6)
+                            };
 
-                                    result.Add(klients);
-                                }
-                            }
+                            result.Add(klients);
                         }
+                    }
 
-                        transaction.Commit();
-                    }
-                    catch (Exception ex)
-                    {
-                        transaction.Rollback();
-                        throw;
-                    }
+                    transaction.Commit();
+                }
+                catch (Exception)
+                {
+                    transaction.Rollback();
+                    throw;
                 }
             }
 
@@ -153,40 +144,36 @@ namespace WebApplication2.Controllers
             {
                 connection.Open();
 
-                using (var transaction = connection.BeginTransaction())
+                using var transaction = connection.BeginTransaction();
+                try
                 {
-                    try
+                    using (var command = new NpgsqlCommand($"SELECT * FROM \"Стоянка\".\"Klients\" WHERE \"Пароль\" = @columnValue;", connection))
                     {
-                        using (var command = new NpgsqlCommand($"SELECT * FROM \"Стоянка\".\"Klients\" WHERE \"Пароль\" = @columnValue;", connection))
+                        command.Parameters.AddWithValue("@columnValue", columnValue);
+
+                        using var reader = command.ExecuteReader();
+                        while (reader.Read())
                         {
-                            command.Parameters.AddWithValue("@columnValue", columnValue);
-
-                            using (var reader = command.ExecuteReader())
+                            var klients = new Klients
                             {
-                                while (reader.Read())
-                                {
-                                    var klients = new Klients
-                                    {
-                                        Код_клиента = reader.GetFieldValue<int>(0),
-                                        ФИО = reader.GetFieldValue<string>(1),
-                                        Дата_рождения = reader.GetFieldValue<DateTime>(2),
-                                        Почта = reader.GetFieldValue<string>(3),
-                                        Логин = reader.GetFieldValue<string>(4),
-                                        Код_авто = reader.GetFieldValue<int>(6)
-                                    };
+                                Код_клиента = reader.GetFieldValue<int>(0),
+                                ФИО = reader.GetFieldValue<string>(1),
+                                Дата_рождения = reader.GetFieldValue<DateTime>(2),
+                                Почта = reader.GetFieldValue<string>(3),
+                                Логин = reader.GetFieldValue<string>(4),
+                                Код_авто = reader.GetFieldValue<int>(6)
+                            };
 
-                                    result.Add(klients);
-                                }
-                            }
+                            result.Add(klients);
                         }
+                    }
 
-                        transaction.Commit();
-                    }
-                    catch (Exception ex)
-                    {
-                        transaction.Rollback();
-                        throw;
-                    }
+                    transaction.Commit();
+                }
+                catch (Exception)
+                {
+                    transaction.Rollback();
+                    throw;
                 }
             }
 
@@ -212,46 +199,42 @@ namespace WebApplication2.Controllers
             {
                 connection.Open();
 
-                using (var transaction = connection.BeginTransaction())
+                using var transaction = connection.BeginTransaction();
+                try
                 {
-                    try
-                    {
-                        string sql = "SELECT * from \"Стоянка\".\"Realisation\" WHERE \"Код_клиента\" = (SELECT \"Код_клиента\" FROM \"Стоянка\".\"Klients\" WHERE \"Логин\" = @columnValue);";
+                    string sql = "SELECT * from \"Стоянка\".\"Realisation\" WHERE \"Код_клиента\" = (SELECT \"Код_клиента\" FROM \"Стоянка\".\"Klients\" WHERE \"Логин\" = @columnValue);";
 
-                        using (var command = new NpgsqlCommand(sql, connection))
+                    using (var command = new NpgsqlCommand(sql, connection))
+                    {
+                        command.Parameters.AddWithValue("@columnValue", columnValue);
+
+                        using var reader = command.ExecuteReader();
+                        while (reader.Read())
                         {
-                            command.Parameters.AddWithValue("@columnValue", columnValue);
-
-                            using (var reader = command.ExecuteReader())
+                            var realisation = new Realisation
                             {
-                                while (reader.Read())
-                                {
-                                    var realisation = new Realisation
-                                    {
-                                        Код = reader.GetFieldValue<int>(0),
-                                        Дата_въезда = reader.GetFieldValue<DateTime>(1),
-                                        Место = reader.GetFieldValue<string>(2),
-                                        Код_услуги = reader.GetFieldValue<int>(3),
-                                        Название_услуги = reader.IsDBNull(4) ? null : reader.GetFieldValue<string>(4),
-                                        Код_клиента = reader.GetFieldValue<int>(5),
-                                        ФИО = reader.IsDBNull(6) ? null : reader.GetFieldValue<string>(6),
-                                        Госномер = reader.IsDBNull(7) ? null : reader.GetFieldValue<string>(7),
-                                        Стоимость = reader.IsDBNull(8) ? null : reader.GetFieldValue<int>(8),
-                                        Сумма = reader.IsDBNull(9) ? null : reader.GetFieldValue<int>(9)
-                                    };
+                                Код = reader.GetFieldValue<int>(0),
+                                Дата_въезда = reader.GetFieldValue<DateTime>(1),
+                                Место = reader.GetFieldValue<string>(2),
+                                Код_услуги = reader.GetFieldValue<int>(3),
+                                Название_услуги = reader.IsDBNull(4) ? null : reader.GetFieldValue<string>(4),
+                                Код_клиента = reader.GetFieldValue<int>(5),
+                                ФИО = reader.IsDBNull(6) ? null : reader.GetFieldValue<string>(6),
+                                Госномер = reader.IsDBNull(7) ? null : reader.GetFieldValue<string>(7),
+                                Стоимость = reader.IsDBNull(8) ? null : reader.GetFieldValue<int>(8),
+                                Сумма = reader.IsDBNull(9) ? null : reader.GetFieldValue<int>(9)
+                            };
 
-                                    result.Add(realisation);
-                                }
-                            }
+                            result.Add(realisation);
                         }
+                    }
 
-                        transaction.Commit();
-                    }
-                    catch (Exception ex)
-                    {
-                        transaction.Rollback();
-                        throw;
-                    }
+                    transaction.Commit();
+                }
+                catch (Exception)
+                {
+                    transaction.Rollback();
+                    throw;
                 }
             }
 
@@ -260,6 +243,7 @@ namespace WebApplication2.Controllers
 
         [HttpPost]
         [Route("AddClientAndCar")]
+       
         public IActionResult AddClientAndCar(КлиентАвто клиентАвто)
         {
             if (!ModelState.IsValid)
@@ -269,57 +253,49 @@ namespace WebApplication2.Controllers
 
             var hashedPassword = BCrypt.Net.BCrypt.HashPassword(клиентАвто.Пароль);
 
-            using (var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection")))
+            using var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection"));
+            connection.Open();
+
+            using var transaction = connection.BeginTransaction();
+            try
             {
-                connection.Open();
+                string sql = @"WITH new_auto AS (
+                                 INSERT INTO ""Стоянка"".""Auto""( ""Марка"", ""Цвет"", ""Тип"", ""Госномер"", ""Год"")
+                                 VALUES (@Марка, @Цвет, @Тип, @Госномер, @Год)
+                                 RETURNING ""Код_авто"")
+                             INSERT INTO ""Стоянка"".""Klients""( ""Логин"", ""Пароль"", ""ФИО"", ""Дата_рождения"", ""Почта"", ""Код_авто"")
+                             VALUES (@Логин, @Пароль, @ФИО, @Дата_рождения, @Почта, (SELECT ""Код_авто"" FROM new_auto))
+                             RETURNING *;";
 
-                using (var transaction = connection.BeginTransaction())
+                using var command = new NpgsqlCommand(sql, connection);
+                command.Parameters.AddWithValue("Марка", клиентАвто.Марка);
+                command.Parameters.AddWithValue("Цвет", клиентАвто.Цвет);
+                command.Parameters.AddWithValue("Тип", клиентАвто.Тип);
+                command.Parameters.AddWithValue("Госномер", клиентАвто.Госномер);
+                command.Parameters.AddWithValue("Год", клиентАвто.Год);
+                command.Parameters.AddWithValue("Логин", клиентАвто.Логин);
+                command.Parameters.AddWithValue("Пароль", hashedPassword);
+                command.Parameters.AddWithValue("ФИО", клиентАвто.ФИО);
+                command.Parameters.AddWithValue("Дата_рождения", клиентАвто.Дата_рождения);
+                command.Parameters.AddWithValue("Почта", клиентАвто.Почта);
+
+                var result = command.ExecuteScalar();
+
+                if (result != null)
                 {
-                    try
-                    {
-                        // Создаем SQL-запрос для вставки данных в таблицы Auto и Klients
-                        string sql = @"WITH new_auto AS (
-                                               INSERT INTO ""Стоянка"".""Auto""( ""Марка"", ""Цвет"", ""Тип"", ""Госномер"", ""Год"")
-                                               VALUES (@Марка, @Цвет, @Тип, @Госномер, @Год)
-                                               RETURNING ""Код_авто"")
-                                           INSERT INTO ""Стоянка"".""Klients""( ""Логин"", ""Пароль"", ""ФИО"", ""Дата_рождения"", ""Почта"", ""Код_авто"")
-                                           VALUES (@Логин, @Пароль, @ФИО, @Дата_рождения, @Почта, (SELECT ""Код_авто"" FROM new_auto))
-                                           RETURNING *;";
-
-                        using (var command = new NpgsqlCommand(sql, connection))
-                        {
-                            // Добавляем параметры для запроса
-                            command.Parameters.AddWithValue("Марка", клиентАвто.Марка);
-                            command.Parameters.AddWithValue("Цвет", клиентАвто.Цвет);
-                            command.Parameters.AddWithValue("Тип", клиентАвто.Тип);
-                            command.Parameters.AddWithValue("Госномер", клиентАвто.Госномер);
-                            command.Parameters.AddWithValue("Год", клиентАвто.Год);
-                            command.Parameters.AddWithValue("ФИО", клиентАвто.ФИО);
-                            command.Parameters.AddWithValue("Дата_рождения", клиентАвто.Дата_рождения);
-                            command.Parameters.AddWithValue("Почта", клиентАвто.Почта);
-                            command.Parameters.AddWithValue("Логин", клиентАвто.Логин);
-                            command.Parameters.AddWithValue("Пароль", hashedPassword);
-
-                            // Выполняем запрос и получаем результат
-                            var result = command.ExecuteScalar();
-
-                            // Проверяем, был ли запрос выполнен успешно
-                            if (result != null)
-                            {
-                                return Ok(); // Возвращаем код 200 OK, если запрос выполнен успешно
-                            }
-                            else
-                            {
-                                return BadRequest(ModelState); // Возвращаем код 400 Bad Request, если запрос не был выполнен успешно
-                            }
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        transaction.Rollback();
-                        throw;
-                    }
+                    transaction.Commit();
+                    return Ok();
                 }
+                else
+                {
+                    return BadRequest(ModelState);
+                }
+            }
+            catch (Exception)
+            {
+                transaction.Rollback();
+                // Log the exception here
+                return StatusCode(500, "An error occurred while inserting data.");
             }
         }
 
@@ -332,54 +308,48 @@ namespace WebApplication2.Controllers
                 return BadRequest(ModelState);
             }
 
-            using (var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection")))
+            using var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection"));
+            connection.Open();
+
+            using var transaction = connection.BeginTransaction();
+            try
             {
-                connection.Open();
-
-                using (var transaction = connection.BeginTransaction())
+                // Проверяем, не используется ли уже новый логин
+                string checkNewLoginSql = "SELECT \"Логин\" FROM \"Стоянка\".\"Klients\" WHERE \"Логин\" = @newLogin;";
+                using (var checkNewLoginCommand = new NpgsqlCommand(checkNewLoginSql, connection))
                 {
-                    try
+                    checkNewLoginCommand.Parameters.AddWithValue("@newLogin", request.NewLogin);
+                    using var checkNewLoginReader = checkNewLoginCommand.ExecuteReader();
+                    if (checkNewLoginReader.Read())
                     {
-                        // Проверяем, не используется ли уже новый логин
-                        string checkNewLoginSql = "SELECT \"Логин\" FROM \"Стоянка\".\"Klients\" WHERE \"Логин\" = @newLogin;";
-                        using (var checkNewLoginCommand = new NpgsqlCommand(checkNewLoginSql, connection))
-                        {
-                            checkNewLoginCommand.Parameters.AddWithValue("@newLogin", request.NewLogin);
-                            using (var checkNewLoginReader = checkNewLoginCommand.ExecuteReader())
-                            {
-                                if (checkNewLoginReader.Read())
-                                {
-                                    return BadRequest(new { success = false, message = "New login is already in use" });
-                                }
-                            }
-                        }
-
-                        // Обновляем данные в таблице Klients
-                        string updateSql = "UPDATE \"Стоянка\".\"Klients\" SET \"ФИО\" = @fio, \"Почта\" = @email, \"Логин\" = @newLogin WHERE \"Логин\" = @oldLogin;";
-                        using (var updateCommand = new NpgsqlCommand(updateSql, connection))
-                        {
-                            updateCommand.Parameters.AddWithValue("@fio", request.FIO);
-                            updateCommand.Parameters.AddWithValue("@email", request.Email);
-                            updateCommand.Parameters.AddWithValue("@newLogin", request.NewLogin);
-                            updateCommand.Parameters.AddWithValue("@oldLogin", request.OldLogin);
-                            int rowsAffected = updateCommand.ExecuteNonQuery();
-                            if (rowsAffected == 0)
-                            {
-                                return NotFound(); // Возвращаем код 404 Not Found, если запись не найдена
-                            }
-                        }
-
-                        // Commit транзакции
-                        transaction.Commit();
-
-                        return Ok(new { success = true }); // Возвращаем код 200 OK, если запрос выполнен успешно
-                    }
-                    catch (Exception ex)
-                    {
-                        transaction.Rollback();
-                        throw;
+                        return BadRequest(new { success = false, message = "New login is already in use" });
                     }
                 }
+
+                // Обновляем данные в таблице Klients
+                string updateSql = "UPDATE \"Стоянка\".\"Klients\" SET \"ФИО\" = @fio, \"Почта\" = @email, \"Логин\" = @newLogin WHERE \"Логин\" = @oldLogin;";
+                using (var updateCommand = new NpgsqlCommand(updateSql, connection))
+                {
+                    updateCommand.Parameters.AddWithValue("@fio", request.FIO);
+                    updateCommand.Parameters.AddWithValue("@email", request.Email);
+                    updateCommand.Parameters.AddWithValue("@newLogin", request.NewLogin);
+                    updateCommand.Parameters.AddWithValue("@oldLogin", request.OldLogin);
+                    int rowsAffected = updateCommand.ExecuteNonQuery();
+                    if (rowsAffected == 0)
+                    {
+                        return NotFound(); // Возвращаем код 404 Not Found, если запись не найдена
+                    }
+                }
+
+                // Commit транзакции
+                transaction.Commit();
+
+                return Ok(new { success = true }); // Возвращаем код 200 OK, если запрос выполнен успешно
+            }
+            catch (Exception)
+            {
+                transaction.Rollback();
+                throw;
             }
         }
 
@@ -394,46 +364,42 @@ namespace WebApplication2.Controllers
                 return BadRequest(ModelState);
             }
 
-            using (var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection")))
+            using var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection"));
+            connection.Open();
+
+            using var transaction = connection.BeginTransaction();
+            try
             {
-                connection.Open();
-
-                using (var transaction = connection.BeginTransaction())
+                // Создаем SQL-запрос для обновления данных в таблице Auto
+                string updateSql = "UPDATE \"Стоянка\".\"Auto\" SET \"Марка\" = @marka, \"Цвет\" = @color, \"Тип\" = @type, \"Госномер\" = @number, \"Год\" = @year WHERE \"Код_авто\" = (SELECT \"Код_авто\" FROM \"Стоянка\".\"Klients\" WHERE \"Логин\" = @login);";
+                using (var updateCommand = new NpgsqlCommand(updateSql, connection))
                 {
-                    try
+                    updateCommand.Parameters.AddWithValue("@marka", request.Марка);
+                    updateCommand.Parameters.AddWithValue("@color", request.Цвет);
+                    updateCommand.Parameters.AddWithValue("@type", request.Тип);
+                    updateCommand.Parameters.AddWithValue("@number", request.Госномер);
+                    updateCommand.Parameters.AddWithValue("@year", request.Год);
+                    updateCommand.Parameters.AddWithValue("@login", request.Логин);
+
+                    // Выполняем запрос и получаем результат
+                    int rowsAffected = updateCommand.ExecuteNonQuery();
+
+                    // Проверяем, была ли запись обновлена
+                    if (rowsAffected == 0)
                     {
-                        // Создаем SQL-запрос для обновления данных в таблице Auto
-                        string updateSql = "UPDATE \"Стоянка\".\"Auto\" SET \"Марка\" = @marka, \"Цвет\" = @color, \"Тип\" = @type, \"Госномер\" = @number, \"Год\" = @year WHERE \"Код_авто\" = (SELECT \"Код_авто\" FROM \"Стоянка\".\"Klients\" WHERE \"Логин\" = @login);";
-                        using (var updateCommand = new NpgsqlCommand(updateSql, connection))
-                        {
-                            updateCommand.Parameters.AddWithValue("@marka", request.Марка);
-                            updateCommand.Parameters.AddWithValue("@color", request.Цвет);
-                            updateCommand.Parameters.AddWithValue("@type", request.Тип);
-                            updateCommand.Parameters.AddWithValue("@number", request.Госномер);
-                            updateCommand.Parameters.AddWithValue("@year", request.Год);
-                            updateCommand.Parameters.AddWithValue("@login", request.Логин);
-
-                            // Выполняем запрос и получаем результат
-                            int rowsAffected = updateCommand.ExecuteNonQuery();
-
-                            // Проверяем, была ли запись обновлена
-                            if (rowsAffected == 0)
-                            {
-                                return NotFound(); // Возвращаем код 404 Not Found, если запись не найдена
-                            }
-                        }
-
-                        // Commit транзакции
-                        transaction.Commit();
-
-                        return Ok(new { success = true }); // Возвращаем код 200 OK, если запрос выполнен успешно
-                    }
-                    catch (Exception ex)
-                    {
-                        transaction.Rollback();
-                        throw;
+                        return NotFound(); // Возвращаем код 404 Not Found, если запись не найдена
                     }
                 }
+
+                // Commit транзакции
+                transaction.Commit();
+
+                return Ok(new { success = true }); // Возвращаем код 200 OK, если запрос выполнен успешно
+            }
+            catch (Exception)
+            {
+                transaction.Rollback();
+                throw;
             }
         }
 
@@ -441,37 +407,31 @@ namespace WebApplication2.Controllers
         [HttpGet("check-availability")]
         public IActionResult CheckParkingSpaceAvailability(string place)
         {
-            using (var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection")))
+            using var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection"));
+            connection.Open();
+
+            using var transaction = connection.BeginTransaction();
+            try
             {
-                connection.Open();
-
-                using (var transaction = connection.BeginTransaction())
+                using (var command = new NpgsqlCommand("SELECT * FROM \"Стоянка\".\"Sales\" WHERE \"Место\" = @place AND \"Дата_выезда\" IS NULL", connection))
                 {
-                    try
+                    command.Parameters.AddWithValue("place", place);
+
+                    using var reader = command.ExecuteReader();
+                    if (reader.Read())
                     {
-                        using (var command = new NpgsqlCommand("SELECT * FROM \"Стоянка\".\"Sales\" WHERE \"Место\" = @place AND \"Дата_выезда\" IS NULL", connection))
-                        {
-                            command.Parameters.AddWithValue("place", place);
-
-                            using (var reader = command.ExecuteReader())
-                            {
-                                if (reader.Read())
-                                {
-                                    return BadRequest(new { message = "Место уже занято" });
-                                }
-                            }
-                        }
-
-                        transaction.Commit();
-
-                        return Ok();
-                    }
-                    catch (Exception)
-                    {
-                        transaction.Rollback();
-                        throw;
+                        return BadRequest(new { message = "Место уже занято" });
                     }
                 }
+
+                transaction.Commit();
+
+                return Ok();
+            }
+            catch (Exception)
+            {
+                transaction.Rollback();
+                throw;
             }
         }
 
@@ -479,36 +439,31 @@ namespace WebApplication2.Controllers
         [HttpGet("check-reserve")]
         public IActionResult CheckParkingSpaceReservation(string place)
         {
-            using (var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection")))
+            using var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection"));
+            connection.Open();
+
+            using var transaction = connection.BeginTransaction();
+            try
             {
-                connection.Open();
-
-                using (var transaction = connection.BeginTransaction())
+                using (var command = new NpgsqlCommand("SELECT COUNT(*) FROM \"Стоянка\".\"Realisation\" WHERE \"Место\" LIKE 'В%' AND \"Место\" = @place", connection))
                 {
-                    try
+                    command.Parameters.AddWithValue("place", place);
+                    var count = Convert.ToInt64(command.ExecuteScalar());
+                    if (count > 0)
                     {
-                        using (var command = new NpgsqlCommand("SELECT COUNT(*) FROM \"Стоянка\".\"Realisation\" WHERE \"Место\" LIKE 'В%' AND \"Место\" = @place", connection))
-                        {
-                            command.Parameters.AddWithValue("place", place);
-
-                            int count = (int)command.ExecuteScalar();
-
-                            if (count > 0)
-                            {
-                                return BadRequest(new { message = "Место забронировано" });
-                            }
-                        }
-
-                        transaction.Commit();
-
-                        return Ok();
-                    }
-                    catch (Exception)
-                    {
-                        transaction.Rollback();
-                        throw;
+                        return BadRequest(new { message = "Место забронировано" });
                     }
                 }
+
+
+                transaction.Commit();
+
+                return Ok();
+            }
+            catch (Exception)
+            {
+                transaction.Rollback();
+                throw;
             }
         }
 
@@ -590,17 +545,17 @@ namespace WebApplication2.Controllers
                     }
 
                     // Commit transaction
-                        transaction.Commit();
+                    transaction.Commit();
 
                     return Ok();
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
                     // If there was an error, roll back the transaction
                     transaction.Rollback();
 
                     // Log the error and return a bad request
-                    
+
                     return BadRequest(new { message = "Произошла ошибка при выполнении операции" });
                 }
             }
@@ -618,44 +573,42 @@ namespace WebApplication2.Controllers
             var hashedPassword = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
 
             // Обновление записи пользователя в базе данных
-            using (var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection")))
+            using var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection"));
+            await connection.OpenAsync();
+
+            // Begin transaction
+            var transaction = connection.BeginTransaction();
+
+            try
             {
-                await connection.OpenAsync();
+                var query = "UPDATE \"Стоянка\".\"Klients\" SET \"Пароль\" = @HashedPassword WHERE \"Почта\" = @Email";
+                var command = new NpgsqlCommand(query, connection);
+                command.Parameters.AddWithValue("HashedPassword", hashedPassword);
+                command.Parameters.AddWithValue("Email", request.Email);
 
-                // Begin transaction
-                var transaction = connection.BeginTransaction();
+                var result = await command.ExecuteNonQueryAsync();
 
-                try
+                if (result > 0)
                 {
-                    var query = "UPDATE \"Стоянка\".\"Klients\" SET \"Пароль\" = @HashedPassword WHERE \"Почта\" = @Email";
-                    var command = new NpgsqlCommand(query, connection);
-                    command.Parameters.AddWithValue("HashedPassword", hashedPassword);
-                    command.Parameters.AddWithValue("Email", request.Email);
-
-                    var result = await command.ExecuteNonQueryAsync();
-
-                    if (result > 0)
-                    {
-                        // Если пароль обновлен успешно, то совершаем commit транзакции
-                         transaction.Commit();
-                        // Возвращаем статус 200 OK и объект с полем "success" со значением true
-                        return Ok(new { success = true });
-                    }
-                    else
-                    {
-                        // Если пользователь не найден или пароль не обновлен, то откатываем транзакцию и возвращаем статус 404 Not Found и объект с полем "success" со значением false
-                        transaction.Rollback();
-                        return NotFound(new { success = false });
-                    }
+                    // Если пароль обновлен успешно, то совершаем commit транзакции
+                    transaction.Commit();
+                    // Возвращаем статус 200 OK и объект с полем "success" со значением true
+                    return Ok(new { success = true });
                 }
-                catch (Exception ex)
+                else
                 {
-                    // Если произошла ошибка, то откатываем транзакцию
+                    // Если пользователь не найден или пароль не обновлен, то откатываем транзакцию и возвращаем статус 404 Not Found и объект с полем "success" со значением false
                     transaction.Rollback();
-                    // Записываем ошибку в лог
-                    // Возвращаем статус 500 Internal Server Error
-                    return StatusCode(500, new { success = false });
+                    return NotFound(new { success = false });
                 }
+            }
+            catch (Exception)
+            {
+                // Если произошла ошибка, то откатываем транзакцию
+                transaction.Rollback();
+                // Записываем ошибку в лог
+                // Возвращаем статус 500 Internal Server Error
+                return StatusCode(500, new { success = false });
             }
         }
 
@@ -664,43 +617,35 @@ namespace WebApplication2.Controllers
         [HttpPost("check-email")]
         public async Task<IActionResult> CheckEmail([FromBody] EmailRequest emailRequest)
         {
-            using (var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection")))
+            using var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection"));
+            await connection.OpenAsync();
+
+            // **Added transaction**
+            using var transaction = connection.BeginTransaction();
+            try
             {
-                await connection.OpenAsync();
+                string query = "SELECT * FROM \"Стоянка\".\"Klients\" WHERE \"Почта\" = @Email";
+                using NpgsqlCommand command = new(query, connection);
+                command.Parameters.AddWithValue("Email", emailRequest.Email);
 
-                // **Added transaction**
-                using (var transaction = connection.BeginTransaction())
+                using NpgsqlDataReader reader = await command.ExecuteReaderAsync();
+                if (reader.HasRows)
                 {
-                    try
-                    {
-                        string query = "SELECT * FROM \"Стоянка\".\"Klients\" WHERE \"Почта\" = @Email";
-                        using (NpgsqlCommand command = new NpgsqlCommand(query, connection))
-                        {
-                            command.Parameters.AddWithValue("Email", emailRequest.Email);
-
-                            using (NpgsqlDataReader reader = await command.ExecuteReaderAsync())
-                            {
-                                if (reader.HasRows)
-                                {
-                                    // Если найден пользователь с указанным адресом электронной почты, то возвращаем статус 200 OK и объект с полем "success" со значением true
-                                    transaction.Commit(); // Commit the transaction
-                                    return Ok(new { success = true });
-                                }
-                                else
-                                {
-                                    // Если пользователь с указанным адресом электронной почты не найден, то возвращаем статус 200 OK и объект с полем "success" со значением false
-                                    transaction.Rollback(); // Rollback the transaction
-                                    return Ok(new { success = false });
-                                }
-                            }
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        transaction.Rollback(); // Rollback the transaction on error
-                        throw; // Rethrow the exception
-                    }
+                    // Если найден пользователь с указанным адресом электронной почты, то возвращаем статус 200 OK и объект с полем "success" со значением true
+                    transaction.Commit(); // Commit the transaction
+                    return Ok(new { success = true });
                 }
+                else
+                {
+                    // Если пользователь с указанным адресом электронной почты не найден, то возвращаем статус 200 OK и объект с полем "success" со значением false
+                    transaction.Rollback(); // Rollback the transaction
+                    return Ok(new { success = false });
+                }
+            }
+            catch (Exception)
+            {
+                transaction.Rollback(); // Rollback the transaction on error
+                throw; // Rethrow the exception
             }
         }
     }

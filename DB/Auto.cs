@@ -1,4 +1,4 @@
-﻿namespace WebApplication2.DB
+﻿namespace WebApplication1.DB
 {
     public partial class Auto
     {
