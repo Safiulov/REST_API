@@ -54,7 +54,10 @@ namespace WebApplication1.Controllers
                          "FROM \"Стоянка\".\"Klients\" a " +
                          "JOIN \"Стоянка\".\"Realisation\" c ON a.\"Код_клиента\" = c.\"Код_клиента\" " +
                          "JOIN \"Стоянка\".\"Auto\" b ON a.\"Код_авто\" = b.\"Код_авто\" " +
-                         "WHERE a.\"Код_клиента\" = @clientCode";
+                        "WHERE a.\"Код_клиента\" = @clientCode " +
+                             "ORDER BY c.\"Дата_въезда\" DESC " +
+                             "LIMIT 1";
+
                         using var command2 = new NpgsqlCommand(sql, connection);
                         connection.Open(); // Открываем соединение снова
                         command2.Parameters.AddWithValue("clientCode", clientCode);
@@ -88,6 +91,21 @@ namespace WebApplication1.Controllers
                 {
                     kvitance.Услуги.Add(new Invoice { Название = reader3.GetString(0), Стоимость = reader3.GetInt32(1) });
                     kvitance.Итого += reader3.GetInt32(1);
+                }
+                if (kvitance.Услуги.Count==0)
+                {
+                    sql = "SELECT Название_услуги, Сумма FROM \"Стоянка\".\"Realisation\" WHERE Код_клиента = @clientCode and (Дата_въезда >= (select Дата_въезда from Стоянка.\"Sales\" where Код_клиента = @clientCode  order by \"Дата_въезда\" desc  limit 1 ) or (Дата_въезда >= (SELECT (Дата_въезда - INTERVAL '1 month') AS Дата_въезда_минус_месяц FROM \"Стоянка\".\"Realisation\" WHERE Код_клиента =@clientCode ORDER BY Дата_въезда DESC LIMIT 1)))  and Дата_въезда between (SELECT (Дата_въезда - INTERVAL '1 month') AS Дата_въезда_минус_месяц FROM \"Стоянка\".\"Realisation\" WHERE Код_клиента =@clientCode ORDER BY Дата_въезда DESC LIMIT 1) and (select Дата_въезда from \"Стоянка\".\"Realisation\" where Код_клиента = @clientCode order by \"Дата_въезда\" desc limit 1)";
+                    using var command4 = new NpgsqlCommand(sql, connection);
+                    connection.Close(); // Закрываем соединение перед созданием новой команды
+                    connection.Open(); // Открываем соединение снова
+                    command4.Parameters.AddWithValue("clientCode", clientCode);
+                    using NpgsqlDataReader reader4 = await command4.ExecuteReaderAsync();
+                    kvitance.Услуги = new List<Invoice>();
+                    while (await reader4.ReadAsync())
+                    {
+                        kvitance.Услуги.Add(new Invoice { Название = reader4.GetString(0), Стоимость = reader4.GetInt32(1) });
+                        kvitance.Итого += reader4.GetInt32(1);
+                    }
                 }
             }
                        

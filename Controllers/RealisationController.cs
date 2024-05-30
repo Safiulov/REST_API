@@ -213,16 +213,18 @@ namespace WebApplication1.Controllers
             using var transaction = connection.BeginTransaction();
             try
             {
-                // Check if space is already occupied
-                var existingRealisationCommand = new NpgsqlCommand("SELECT * FROM \"Стоянка\".\"Realisation\" WHERE \"Место\" = @Место;", connection);
-                existingRealisationCommand.Parameters.AddWithValue("Место", realisation.Место);
-                var existingRealisation = await existingRealisationCommand.ExecuteScalarAsync();
-                if (existingRealisation != null)
+                if (realisation.Место.StartsWith("B") && (realisation.Код_услуги == 1 || realisation.Код_услуги == 2))
                 {
-                    ModelState.AddModelError(string.Empty, "Данное место уже занято");
-                    return BadRequest(ModelState);
+                    // Check if space is already occupied
+                    var existingRealisationCommand = new NpgsqlCommand("SELECT * FROM \"Стоянка\".\"Realisation\" WHERE \"Место\" = 'B0' and (Код_услуги = 1 or Код_услуги = 2)", connection);
+                    existingRealisationCommand.Parameters.AddWithValue("Место", realisation.Место);
+                    var existingRealisation = await existingRealisationCommand.ExecuteScalarAsync();
+                    if (existingRealisation != null)
+                    {
+                        ModelState.AddModelError(string.Empty, "Данное место уже занято");
+                        return BadRequest(ModelState);
+                    }
                 }
-
 
                 // Создаем SQL-запрос для вставки записи в таблицу Realisation
                 await using var command = new NpgsqlCommand("INSERT INTO \"Стоянка\".\"Realisation\"(\"Дата_въезда\", \"Место\",  \"Код_услуги\", \"Код_клиента\") VALUES (@Дата_въезда, @Место, @Код_услуги, @Код_клиента);", connection, transaction);

@@ -161,6 +161,7 @@ namespace WebApplication1.Controllers
                                 Дата_рождения = reader.GetFieldValue<DateTime>(2),
                                 Почта = reader.GetFieldValue<string>(3),
                                 Логин = reader.GetFieldValue<string>(4),
+                                Пароль= reader.GetFieldValue<string>(5),
                                 Код_авто = reader.GetFieldValue<int>(6)
                             };
 
