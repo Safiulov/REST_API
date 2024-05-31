@@ -79,36 +79,39 @@ namespace WebApplication1.Controllers
                         }
                     }
                 }
+
                 // Получаем информацию о услугах
-                sql = "SELECT Название_услуги, Сумма FROM Стоянка.\"Realisation\" WHERE Код_клиента = @clientCode and Дата_въезда between (select Дата_въезда from Стоянка.\"Sales\" where Код_клиента = @clientCode  order by \"Дата_въезда\" desc  limit 1) and (select Дата_выезда from Стоянка.\"Sales\" where Код_клиента = @clientCode order by \"Дата_выезда\" desc limit 1)";
-                using var command3 = new NpgsqlCommand(sql, connection);
-                connection.Close(); // Закрываем соединение перед созданием новой команды
-                connection.Open(); // Открываем соединение снова
-                command3.Parameters.AddWithValue("clientCode", clientCode);
-                using NpgsqlDataReader reader3 = await command3.ExecuteReaderAsync();
+                 sql = "SELECT Название_услуги, Сумма FROM \"Стоянка\".\"Realisation\" WHERE Код_клиента = @clientCode and Место like 'B%' and (Дата_въезда >= (SELECT (Дата_въезда - INTERVAL '1 month') AS Дата_въезда_минус_месяц FROM \"Стоянка\".\"Realisation\" WHERE Код_клиента =@clientCode and Место like 'B%'ORDER BY Дата_въезда DESC LIMIT 1))  ";
+                using var command4 = new NpgsqlCommand(sql, connection);
+               
+                command4.Parameters.AddWithValue("clientCode", clientCode);
+                using NpgsqlDataReader reader4 = await command4.ExecuteReaderAsync();
                 kvitance.Услуги = new List<Invoice>();
-                while (await reader3.ReadAsync())
+                while (await reader4.ReadAsync())
                 {
-                    kvitance.Услуги.Add(new Invoice { Название = reader3.GetString(0), Стоимость = reader3.GetInt32(1) });
-                    kvitance.Итого += reader3.GetInt32(1);
+                    kvitance.Услуги.Add(new Invoice { Название = reader4.GetString(0), Стоимость = reader4.GetInt32(1) });
+                    kvitance.Итого += reader4.GetInt32(1);
                 }
-                if (kvitance.Услуги.Count==0)
+              
+                if (kvitance.Дата_въезда<= DateTime.Now)
                 {
-                    sql = "SELECT Название_услуги, Сумма FROM \"Стоянка\".\"Realisation\" WHERE Код_клиента = @clientCode and (Дата_въезда >= (select Дата_въезда from Стоянка.\"Sales\" where Код_клиента = @clientCode  order by \"Дата_въезда\" desc  limit 1 ) or (Дата_въезда >= (SELECT (Дата_въезда - INTERVAL '1 month') AS Дата_въезда_минус_месяц FROM \"Стоянка\".\"Realisation\" WHERE Код_клиента =@clientCode ORDER BY Дата_въезда DESC LIMIT 1)))  and Дата_въезда between (SELECT (Дата_въезда - INTERVAL '1 month') AS Дата_въезда_минус_месяц FROM \"Стоянка\".\"Realisation\" WHERE Код_клиента =@clientCode ORDER BY Дата_въезда DESC LIMIT 1) and (select Дата_въезда from \"Стоянка\".\"Realisation\" where Код_клиента = @clientCode order by \"Дата_въезда\" desc limit 1)";
-                    using var command4 = new NpgsqlCommand(sql, connection);
-                    connection.Close(); // Закрываем соединение перед созданием новой команды
-                    connection.Open(); // Открываем соединение снова
-                    command4.Parameters.AddWithValue("clientCode", clientCode);
-                    using NpgsqlDataReader reader4 = await command4.ExecuteReaderAsync();
+                    connection.Close();
+                    connection.Open();
+                    sql = "SELECT Название_услуги, Сумма FROM Стоянка.\"Realisation\" WHERE Код_клиента = @clientCode and Место like 'A%'  and Дата_въезда between (select Дата_въезда from Стоянка.\"Sales\" where Код_клиента = @clientCode  order by \"Дата_въезда\" desc  limit 1) and (select Дата_выезда from Стоянка.\"Sales\" where Код_клиента = @clientCode order by \"Дата_выезда\" desc limit 1)";
+                    using var command3 = new NpgsqlCommand(sql, connection);
+                   
+                    command3.Parameters.AddWithValue("clientCode", clientCode);
+                    using NpgsqlDataReader reader3 = await command3.ExecuteReaderAsync();
                     kvitance.Услуги = new List<Invoice>();
-                    while (await reader4.ReadAsync())
+                    while (await reader3.ReadAsync())
                     {
-                        kvitance.Услуги.Add(new Invoice { Название = reader4.GetString(0), Стоимость = reader4.GetInt32(1) });
-                        kvitance.Итого += reader4.GetInt32(1);
+                        kvitance.Услуги.Add(new Invoice { Название = reader3.GetString(0), Стоимость = reader3.GetInt32(1) });
+                        kvitance.Итого += reader3.GetInt32(1);
                     }
                 }
+
             }
-                       
+
             return Ok(kvitance);
         }
 
