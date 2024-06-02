@@ -203,6 +203,11 @@ namespace WebApplication1.Controllers
                 ModelState.AddModelError(string.Empty, "Ошибка: место начинается с 'A' и код_услуги равен 1 или 2");
                 return BadRequest(ModelState);
             }
+            if (realisation.Место.StartsWith("B") && (realisation.Код_услуги == 3))
+            {
+                ModelState.AddModelError(string.Empty, "Ошибка: Услуга недоступна в данном секторе");
+                return BadRequest(ModelState);
+            }
 
             // Создаем подключение к базе данных PostgreSQL
             await using var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection"));
