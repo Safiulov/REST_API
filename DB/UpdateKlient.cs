@@ -1,10 +1,18 @@
-﻿namespace WebApplication1.DB
+﻿using System.ComponentModel.DataAnnotations;
+
+namespace WebApplication1.DB
 {
     public class UpdateKlient
     {
-        public string OldLogin { get; set; }
-        public string FIO { get; set; }
-        public string Email { get; set; }
-        public string NewLogin { get; set; }
+        [Required]
+        [StringLength(20, MinimumLength = 5, ErrorMessage = "Длина логина должна быть от 5 до 20 символов.")]
+        public required string OldLogin { get; set; }
+        public required string FIO { get; set; }
+        [Required]
+        [EmailAddress]
+        public required string Email { get; set; }
+        [Required]
+        [StringLength(20, MinimumLength = 5, ErrorMessage = "Длина логина должна быть от 5 до 20 символов.")]
+        public required string NewLogin { get; set; }
     }
 }

@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Dapper;
+using Microsoft.AspNetCore.Mvc;
 using Npgsql;
 using WebApplication1.DB;
 
@@ -25,93 +26,33 @@ namespace WebApplication1.Controllers
                 return BadRequest("Не указаны параметры для поиска");
             }
 
-            var result = new List<Spaces>();
+           
+                using var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection"));
+                // Создаем SQL-запрос для выборки данных о местах по указанному столбцу
+                string query = $"SELECT * FROM \"Стоянка\".\"Spaces\" WHERE cast({columnName} as text) ILIKE @columnValue";
 
-            await using (var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection")))
-            {
-                await connection.OpenAsync();
+                // Используем Dapper для выполнения запроса и получения результатов
+                var result = await connection.QueryAsync<Spaces>(query, new { columnValue = $"%{columnValue}%" });
 
-                // **Added transaction**
-                using (var transaction = connection.BeginTransaction())
-                {
-                    try
-                    {
-                        var commandText = $"SELECT * FROM \"Стоянка\".\"Spaces\" WHERE cast({columnName} as text) ILIKE @columnValue";
-                        await using (var command = new NpgsqlCommand(commandText, connection))
-                        {
-                            command.Parameters.Add(new NpgsqlParameter("columnValue", $"%{columnValue}%"));
-
-                            await using (var reader = await command.ExecuteReaderAsync())
-                            {
-                                while (await reader.ReadAsync())
-                                {
-                                    var spaces = new Spaces
-                                    {
-                                        Место = await reader.GetFieldValueAsync<string>(0),
-                                        Статус = await reader.GetFieldValueAsync<string>(1),
-                                    };
-
-                                    result.Add(spaces);
-                                }
-                            }
-                        }
-
-                        transaction.Commit(); // Commit the transaction
-                        return Ok(result);
-                    }
-                    catch (Exception ex)
-                    {
-                        transaction.Rollback(); // Rollback the transaction on error
-                        throw; // Rethrow the exception
-                    }
-                }
-            }
+                return Ok(result);
+            
+           
         }
-
         [HttpGet]
         public async Task<IActionResult> Get()
         {
-            var result = new List<Spaces>();
+           
+                using var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection"));
+                // Создаем SQL-запрос для выборки всех мест
+                string query = "SELECT * FROM \"Стоянка\".\"Spaces\";";
 
-            await using (var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection")))
-            {
-                await connection.OpenAsync();
+                // Используем Dapper для выполнения запроса и получения результатов
+                var result = await connection.QueryAsync<Spaces>(query);
 
-                // **Added transaction**
-                using (var transaction = connection.BeginTransaction())
-                {
-                    try
-                    {
-                        await using (var command = new NpgsqlCommand("SELECT * FROM \"Стоянка\".\"Spaces\";", connection))
-                        {
-                            await using (var reader = await command.ExecuteReaderAsync())
-                            {
-                                while (await reader.ReadAsync())
-                                {
-                                    var spaces = new Spaces
-                                    {
-                                        Место = await reader.GetFieldValueAsync<string>(0),
-                                        Статус = await reader.GetFieldValueAsync<string>(1),
-                                    };
-
-                                    result.Add(spaces);
-                                }
-                            }
-                        }
-
-                        transaction.Commit(); // Commit the transaction
-                        return Ok(result);
-                    }
-                    catch (Exception ex)
-                    {
-                        transaction.Rollback(); // Rollback the transaction on error
-                        throw; // Rethrow the exception
-                    }
-                }
-            }
+                return Ok(result);
+           
+           
         }
-
-
 
         [HttpPost]
         public async Task<IActionResult> Post([FromBody] Spaces spaces)
@@ -121,37 +62,22 @@ namespace WebApplication1.Controllers
                 return BadRequest(ModelState);
             }
 
-            await using (var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection")))
-            {
-                await connection.OpenAsync();
+                using var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection"));
+                // Создаем SQL-запрос для вставки места
+                string query = "INSERT INTO \"Стоянка\".\"Spaces\"(\"Место\") VALUES (@Место);";
 
-                // **Added transaction**
-                using (var transaction = connection.BeginTransaction())
+                // Используем Dapper для выполнения вставки данных
+                int rowsAffected = await connection.ExecuteAsync(query, new { spaces.Место });
+
+                if (rowsAffected == 1)
                 {
-                    try
-                    {
-                        await using (var command = new NpgsqlCommand("INSERT INTO \"Стоянка\".\"Spaces\"(\"Место\") VALUES (@Место);", connection))
-                        {
-                            command.Parameters.AddWithValue("Место", spaces.Место);
-                            int rowsAffected = await command.ExecuteNonQueryAsync();
-                            if (rowsAffected == 1)
-                            {
-                                transaction.Commit(); // Commit the transaction
-                                return Ok();
-                            }
-                            else
-                            {
-                                return BadRequest(ModelState);
-                            }
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        transaction.Rollback(); // Rollback the transaction on error
-                        throw; // Rethrow the exception
-                    }
+                    return Ok();
                 }
-            }
+                else
+                {
+                    return BadRequest(ModelState);
+                }
+
         }
 
 
@@ -159,76 +85,46 @@ namespace WebApplication1.Controllers
         [HttpDelete("{id}")]
         public async Task<IActionResult> Delete(string id)
         {
-            await using (var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection")))
-            {
-                await connection.OpenAsync();
+                using var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection"));
+                // Создаем SQL-запрос для удаления места по идентификатору
+                string query = "DELETE FROM \"Стоянка\".\"Spaces\" WHERE \"Место\" = @id;";
 
-                // **Added transaction**
-                using (var transaction = connection.BeginTransaction())
+                // Используем Dapper для выполнения удаления данных
+                int rowsAffected = await connection.ExecuteAsync(query, new { id });
+
+                if (rowsAffected > 0)
                 {
-                    try
-                    {
-                        await using (var command = new NpgsqlCommand("DELETE FROM \"Стоянка\".\"Spaces\" WHERE \"Место\" = @id;", connection))
-                        {
-
-                            command.Parameters.AddWithValue("id", id);
-                            int rowsAffected = await command.ExecuteNonQueryAsync();
-                            if (rowsAffected > 0)
-                            {
-                                transaction.Commit(); // Commit the transaction
-                                return Ok();
-                            }
-                            else
-                            {
-                                return NotFound();
-                            }
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        transaction.Rollback(); // Rollback the transaction on error
-                        throw; // Rethrow the exception
-                    }
+                    return Ok();
                 }
-            }
+                else
+                {
+                    return NotFound();
+                }
+           
         }
-
 
 
         [HttpDelete]
         [Route("Delete_All")]
         public async Task<IActionResult> DeleteAll()
         {
-            await using (var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection")))
-            {
-                await connection.OpenAsync();
+            
+                using var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection"));
+                // Создаем SQL-запрос для удаления всех мест
+                string query = "DELETE FROM \"Стоянка\".\"Spaces\";";
 
-                // **Added transaction**
-                using (var transaction = connection.BeginTransaction())
+                // Используем Dapper для выполнения удаления данных
+                int rowsAffected = await connection.ExecuteAsync(query);
+
+                if (rowsAffected > 0)
                 {
-                    try
-                    {
-                        await using (var command = new NpgsqlCommand("DELETE FROM \"Стоянка\".\"Spaces\";", connection))
-                        {
-                            int rowsAffected = await command.ExecuteNonQueryAsync();
-                            if (rowsAffected > 0)
-                            {
-                                transaction.Commit(); // Commit the transaction
-                                return Ok();
-                            }
-                            else
-                            {
-                                return NotFound();
-                            }
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        transaction.Rollback(); // Rollback the transaction on error
-                        throw; // Rethrow the exception
-                    }
+                    return Ok();
                 }
-            }
+                else
+                {
+                    return NotFound();
+                }
+
         }
     }
 }

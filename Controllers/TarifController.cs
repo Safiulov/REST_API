@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Dapper;
+using Microsoft.AspNetCore.Mvc;
 using Npgsql;
 using WebApplication1.DB;
 
@@ -25,96 +26,31 @@ namespace WebApplication1.Controllers
                 return BadRequest("Не указаны параметры для поиска");
             }
 
-            var result = new List<Tarifs>();
+         
+                using var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection"));
+                // Создаем SQL-запрос для выборки данных о тарифах по указанному столбцу
+                string query = $"SELECT * FROM \"Стоянка\".\"Tarifs\" WHERE cast({columnName} as text) ILIKE @columnValue";
 
-            await using (var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection")))
-            {
-                await connection.OpenAsync();
+                // Используем Dapper для выполнения запроса и получения результатов
+                var result = await connection.QueryAsync<Tarifs>(query, new { columnValue = $"%{columnValue}%" });
 
-                // **Added transaction**
-                using (var transaction = connection.BeginTransaction())
-                {
-                    try
-                    {
-                        await using (var command = new NpgsqlCommand($"SELECT * FROM \"Стоянка\".\"Tarifs\" WHERE cast({columnName} as text) ilike @columnValue", connection))
-                        {
-                            command.Parameters.Add(new NpgsqlParameter("columnValue", $"%{columnValue}%"));
-                            await using (var reader = await command.ExecuteReaderAsync())
-                            {
-                                while (await reader.ReadAsync())
-                                {
-                                    var tarifs = new Tarifs
-                                    {
-                                        Код_тарифа = await reader.GetFieldValueAsync<int>(0),
-                                        Название = await reader.GetFieldValueAsync<string>(1),
-                                        Условие = await reader.GetFieldValueAsync<string>(2),
-                                        Время_действия = await reader.GetFieldValueAsync<string>(3),
-                                        Стоимость = reader.IsDBNull(4) ? null : await reader.GetFieldValueAsync<int>(4),
-                                    };
-
-                                    result.Add(tarifs);
-                                }
-                            }
-                        }
-
-                        transaction.Commit(); // Commit the transaction
-                    }
-                    catch (Exception ex)
-                    {
-                        transaction.Rollback(); // Rollback the transaction on error
-                        throw; // Rethrow the exception
-                    }
-                }
-            }
-
-            return Ok(result);
+                return Ok(result);
+          
         }
 
         [HttpGet]
         public async Task<IActionResult> Get()
         {
-            var result = new List<Tarifs>();
+           
+                using var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection"));
+                // Создаем SQL-запрос для выборки всех тарифов
+                string query = "SELECT * FROM \"Стоянка\".\"Tarifs\";";
 
-            await using (var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection")))
-            {
-                await connection.OpenAsync();
+                // Используем Dapper для выполнения запроса и получения результатов
+                var result = await connection.QueryAsync<Tarifs>(query);
 
-                // **Added transaction**
-                using (var transaction = connection.BeginTransaction())
-                {
-                    try
-                    {
-                        await using (var command = new NpgsqlCommand("SELECT * FROM \"Стоянка\".\"Tarifs\";", connection))
-                        {
-                            await using (var reader = await command.ExecuteReaderAsync())
-                            {
-                                while (await reader.ReadAsync())
-                                {
-                                    var tarifs = new Tarifs
-                                    {
-                                        Код_тарифа = await reader.GetFieldValueAsync<int>(0),
-                                        Название = await reader.GetFieldValueAsync<string>(1),
-                                        Условие = await reader.GetFieldValueAsync<string>(2),
-                                        Время_действия = await reader.GetFieldValueAsync<string>(3),
-                                        Стоимость = reader.IsDBNull(4) ? null : await reader.GetFieldValueAsync<int>(4),
-                                    };
-
-                                    result.Add(tarifs);
-                                }
-                            }
-                        }
-
-                        transaction.Commit(); // Commit the transaction
-                    }
-                    catch (Exception ex)
-                    {
-                        transaction.Rollback(); // Rollback the transaction on error
-                        throw; // Rethrow the exception
-                    }
-                }
-            }
-
-            return Ok(result);
+                return Ok(result);
+           
         }
 
 
@@ -126,44 +62,23 @@ namespace WebApplication1.Controllers
                 return BadRequest(ModelState);
             }
 
-            await using (var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection")))
-            {
-                await connection.OpenAsync();
+                using var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection"));
+                // Создаем SQL-запрос для обновления тарифа по идентификатору
+                string query = "UPDATE \"Стоянка\".\"Tarifs\" SET \"Условие\"=@Условие, \"Время_действия\"=@Время_действия, \"Стоимость\"=@Стоимость WHERE \"Код_тарифа\" = @id;";
 
-                // **Added transaction**
-                using (var transaction = connection.BeginTransaction())
+                // Используем Dapper для выполнения обновления данных
+                int rowsAffected = await connection.ExecuteAsync(query, new { id, tarifs.Условие, tarifs.Время_действия, tarifs.Стоимость });
+
+                if (rowsAffected == 1)
                 {
-                    try
-                    {
-                        await using (var command = new NpgsqlCommand("UPDATE \"Стоянка\".\"Tarifs\" SET \"Условие\"=@Условие, \"Время_действия\"=@Время_действия, \"Стоимость\"=@Стоимость WHERE \"Код_тарифа\" = @id;", connection))
-                        {
-                            command.Parameters.AddWithValue("id", id);
-                            command.Parameters.AddWithValue("Условие", tarifs.Условие);
-                            command.Parameters.AddWithValue("Время_действия", tarifs.Время_действия);
-                            command.Parameters.AddWithValue("Стоимость", tarifs.Стоимость);
-
-                            int rowsAffected = await command.ExecuteNonQueryAsync();
-
-                            if (rowsAffected == 1)
-                            {
-                                transaction.Commit(); // Commit the transaction
-                                return Ok();
-                            }
-                            else
-                            {
-                                return NotFound();
-                            }
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        transaction.Rollback(); // Rollback the transaction on error
-                        throw; // Rethrow the exception
-                    }
+                    return Ok();
                 }
-            }
+                else
+                {
+                    return NotFound();
+                }
+           
         }
-
 
 
     }

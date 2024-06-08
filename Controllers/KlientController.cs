@@ -1,4 +1,6 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Dapper;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Caching.Memory;
 using Npgsql;
 using WebApplication1.DB;
 
@@ -10,170 +12,85 @@ namespace WebApplication1.Controllers
     public class KlientController : Controller
     {
         private readonly IConfiguration _databaseService;
+      
         public KlientController(IConfiguration configuration)
         {
             _databaseService = configuration;
+           
         }
 
-        // Аннотация, указывающая, что этот метод отвечает на HTTP-запрос GET
         [HttpGet]
-        // Аннотация, указывающая маршрут для этого метода
         [Route("Search")]
-        // Асинхронный метод, который возвращает результат IActionResult
-        public async Task<IActionResult> Get(string columnName, string columnValue)
+        public async Task<IActionResult> SearchClients(string columnName, string columnValue)
         {
-            // Проверка, что параметры для поиска не пустые
             if (string.IsNullOrEmpty(columnName) || string.IsNullOrEmpty(columnValue))
             {
-                // Возвращает ответ BadRequest с сообщением об ошибке
                 return BadRequest("Не указаны параметры для поиска");
             }
-            // Создание пустого списка для хранения результатов поиска
-            var result = new List<Klients>();
-            // Создание и открытие соединения с базой данных PostgreSQL
-            await using (var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection")))
-            {
-                await connection.OpenAsync();
-                using var transaction = connection.BeginTransaction();
-                try
-                {
 
-                    // Создание и выполнение SQL-запроса для поиска по указанному столбцу
-                    await using (var command = new NpgsqlCommand($"SELECT * from \"Стоянка\".\"Klients\" WHERE cast({columnName} as text) ILIKE @columnValue;", connection))
-                    {
-                        // Добавление параметра для значения столбца в запрос
-                        command.Parameters.AddWithValue("@columnValue", $"%{columnValue}%");
-                        // Выполнение запроса и получение результатов
-                        await using var reader = await command.ExecuteReaderAsync();
-                        // Чтение результатов запроса
-                        while (await reader.ReadAsync())
-                        {
-                            // Создание нового экземпляра класса Klients и заполнение его данными из результата запроса
-                            var klients = new Klients
-                            {
-                                Код_клиента = await reader.GetFieldValueAsync<int>(0),
-                                ФИО = await reader.GetFieldValueAsync<string>(1),
-                                Дата_рождения = await reader.GetFieldValueAsync<DateTime>(2),
-                                Почта = await reader.GetFieldValueAsync<string>(3),
-                                Логин = await reader.GetFieldValueAsync<string>(4),
-                                Пароль = await reader.GetFieldValueAsync<string>(5),
-                                Код_авто = await reader.GetFieldValueAsync<int>(6)
-                            };
-                            // Добавление найденного клиента в список результатов
-                            result.Add(klients);
-                        }
-                    }
-                    // Коммитим транзакцию
-                    transaction.Commit();
-                }
-                catch
-                {
-                    // Отменяем транзакцию в случае ошибки
-                    transaction.Rollback();
-                    throw;
-                }
-            }
+            var connectionString = _databaseService.GetConnectionString("DefaultConnection");
+            using var connection = new NpgsqlConnection(connectionString);
+            await connection.OpenAsync();
 
-            // Возвращает ответ OK с результатами поиска
+            // Use Dapper to execute the query and get the results
+            var result = await connection.QueryAsync<Klients>(
+                $"SELECT * from \"Стоянка\".\"Klients\" WHERE cast({columnName} as text) ILIKE @columnValue;",
+                new { columnValue = $"%{columnValue}%" }
+            );
+
             return Ok(result);
         }
 
         [HttpGet]
-        public async Task<IActionResult> Get()
+        public async Task<IActionResult> GetAllClients()
         {
-            // Создаем пустой список для хранения объектов Klients
-            var result = new List<Klients>();
-            // Устанавливаем соединение с базой данных
-            await using (var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection")))
-            {
-                await connection.OpenAsync();
-                using var transaction = connection.BeginTransaction();
-                try
-                {
-                    // Создаем команду для выполнения SQL-запроса
-                    await using (var command = new NpgsqlCommand("SELECT * FROM \"Стоянка\".\"Klients\";", connection))
-                    {
-                        // Выполняем команду и получаем объект для чтения данных
-                        await using var reader = await command.ExecuteReaderAsync();
-                        // Проходим по каждой строке результата
-                        while (await reader.ReadAsync())
-                        {
-                            // Создаем новый объект Klients и заполняем его данными из текущей строки
-                            var klients = new Klients
-                            {
-                                Код_клиента = await reader.GetFieldValueAsync<int>(0), // Получаем код клиента
-                                ФИО = await reader.GetFieldValueAsync<string>(1),   // Получаем ФИО клиента
-                                Дата_рождения = await reader.GetFieldValueAsync<DateTime>(2), // Получаем дату рождения клиента
-                                Почта = await reader.GetFieldValueAsync<string>(3),   // Получаем почту клиента
-                                Логин = await reader.GetFieldValueAsync<string>(4),   // Получаем логин клиента
-                                Пароль = await reader.GetFieldValueAsync<string>(5),   // Получаем пароль клиента
-                                Код_авто = await reader.GetFieldValueAsync<int>(6)    // Получаем код автомобиля клиента
-                            };
-                            // Добавляем полученного клиента в список результатов
-                            result.Add(klients);
-                        }
-                    }
-                    // Коммитим транзакцию
-                    transaction.Commit();
-                }
-                catch
-                {
-                    // Отменяем транзакцию в случае ошибки
-                    transaction.Rollback();
-                    throw;
-                }
-            }
-            // Возвращаем результат в формате JSON
+            var connectionString = _databaseService.GetConnectionString("DefaultConnection");
+            using var connection = new NpgsqlConnection(connectionString);
+            await connection.OpenAsync();
+
+            // Use Dapper to execute the query and get the results
+            var result = await connection.QueryAsync<Klients>(
+                "SELECT * FROM \"Стоянка\".\"Klients\";"
+            );
+
             return Ok(result);
         }
-
         [HttpPut("{id}")]
-        public async Task<IActionResult> Put(int id, [FromBody] Klients klient)
+        public async Task<IActionResult> UpdateClient(int id, [FromBody] Klients klient)
         {
             if (!ModelState.IsValid)
             {
                 return BadRequest(ModelState);
             }
-            // Обновляем данные клиента в базе данных
-            await using var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection"));
+
+            var connectionString = _databaseService.GetConnectionString("DefaultConnection");
+            using var connection = new NpgsqlConnection(connectionString);
             await connection.OpenAsync();
-            using var transaction = connection.BeginTransaction();
-            try
+
+            // Use Dapper to execute the query and get the number of rows affected
+            var rowsAffected = await connection.ExecuteAsync(
+                "UPDATE \"Стоянка\".\"Klients\" SET \"ФИО\"=@ФИО, \"Код_авто\"=@Код_авто, \"Дата_рождения\"=@Дата_рождения, \"Почта\"=@Почта,\"Логин\"=@Логин WHERE \"Код_клиента\" = @id;",
+                new { id, klient.ФИО, klient.Дата_рождения, klient.Почта, klient.Логин, klient.Код_авто }
+            );
+
+            // Check if the update was successful
+            if (rowsAffected == 1)
             {
-                await using var command = new NpgsqlCommand("UPDATE \"Стоянка\".\"Klients\" SET \"ФИО\"=@ФИО, \"Код_авто\"=@Код_авто, \"Дата_рождения\"=@Дата_рождения, \"Почта\"=@Почта,\"Логин\"=@Логин WHERE \"Код_клиента\" = @id;", connection);
-                // Добавляем параметры запроса
-                command.Parameters.AddWithValue("id", id);
-                command.Parameters.AddWithValue("ФИО", klient.ФИО);
-                command.Parameters.AddWithValue("Дата_рождения", klient.Дата_рождения);
-                command.Parameters.AddWithValue("Почта", klient.Почта);
-                command.Parameters.AddWithValue("Логин", klient.Логин);
-                command.Parameters.AddWithValue("Код_авто", klient.Код_авто);
-                // Выполняем обновление данных
-                int rowsAffected = await command.ExecuteNonQueryAsync();
-                // Проверяем, был ли аффект от обновления
-                if (rowsAffected == 1)
-                {
-                    transaction.Commit();
-                    return Ok(); // Если обновление прошло успешно, возвращаем код 200
-                }
-                else
-                {
-                    // Отменяем транзакцию
-                    transaction.Rollback();
-                    return NotFound();
-                }
+                return Ok(); // Return 200 OK if the update was successful
             }
-            catch
+            else
             {
-                // Отменяем транзакцию в случае ошибки
-                transaction.Rollback();
-                throw;
+                return NotFound(); // Return 404 Not Found if no rows were affected
             }
         }
 
         [HttpPost]
         public async Task<IActionResult> Post([FromBody] Klients klient)
         {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
             int rowsAffected = 0;
             string hashedPassword = string.Empty;
 
@@ -188,25 +105,14 @@ namespace WebApplication1.Controllers
                 {
                     command.Parameters.AddWithValue("Логин", klient.Логин);
                     var count = await command.ExecuteScalarAsync();
-                    if (count is long countValue)
+                    if (count is long countValue && countValue > 0)
                     {
-                        if (countValue > 0)
-                        {
-                            await transaction.RollbackAsync();
-                            return BadRequest(new { error = "Клиент с таким логином уже существует" });
-                        }
-                    }
-                    else
-                    {
-                        // Обработка случая, когда count возвращает NULL
                         await transaction.RollbackAsync();
-                        return BadRequest(new { error = "Ошибка при выполнении запроса" });
+                        return BadRequest(new { error = "Клиент с таким логином уже существует" });
                     }
                 }
-
                 // Хеширование пароля
                 hashedPassword = BCrypt.Net.BCrypt.HashPassword(klient.Пароль);
-
                 // Добавление нового клиента в базу данных
                 await using (var command = new NpgsqlCommand("INSERT INTO \"Стоянка\".\"Klients\"(\"ФИО\", \"Дата_рождения\", \"Почта\", \"Логин\", \"Пароль\",\"Код_авто\") VALUES (@ФИО, @Дата_рождения, @Почта, @Логин, @Пароль,@Код_авто);", connection))
                 {
@@ -223,7 +129,7 @@ namespace WebApplication1.Controllers
                 {
                     // Возвращаем созданного клиента, если он был успешно добавлен
                     await transaction.CommitAsync();
-                    return CreatedAtAction(nameof(Get), new { id = klient.Код_клиента }, klient);
+                    return CreatedAtAction(nameof(GetAllClients), new { id = klient.Код_клиента }, klient);
                 }
                 else
                 {
@@ -242,75 +148,48 @@ namespace WebApplication1.Controllers
 
         [HttpDelete]
         [Route("{id}")]
-        public async Task<IActionResult> Delete(int id)
+        public async Task<IActionResult> DeleteClient(int id)
         {
-            // Создаем подключение к базе данных PostgreSQL
-            await using var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection"));
-            // Ожидаем, пока откроется соединение
+            var connectionString = _databaseService.GetConnectionString("DefaultConnection");
+            using var connection = new NpgsqlConnection(connectionString);
             await connection.OpenAsync();
-            using var transaction = connection.BeginTransaction();
-            try
+
+            // Use Dapper to execute the delete query and get the number of rows affected
+            var rowsAffected = await connection.ExecuteAsync(
+                "DELETE FROM \"Стоянка\".\"Klients\" WHERE Код_клиента = @id;",
+                new { id }
+            );
+
+            if (rowsAffected == 0)
             {
-                // Создаем команду для удаления клиента по его коду
-                await using var command = new NpgsqlCommand("DELETE FROM \"Стоянка\".\"Klients\" WHERE Код_клиента = @id;", connection);
-                // Добавляем параметр для идентификатора клиента
-                command.Parameters.AddWithValue("id", id);
-                // Выполняем команду
-                int affectedRows = await command.ExecuteNonQueryAsync();
-                if (affectedRows == 0)
-                {
-                    // Если запись не найдена, возвращаем 404 Not Found
-                    return NotFound();
-                }
-                // Коммитим транзакцию
-                transaction.Commit();
-                // Возвращаем статус 200 OK
-                return Ok();
+                // If no rows were affected, the client was not found, so return 404 Not Found
+                return NotFound();
             }
-            catch
-            {
-                // Отменяем транзакцию в случае ошибки
-                transaction.Rollback();
-                throw;
-            }
+
+            // If rows were affected, return 200 OK
+            return Ok();
         }
-
-
 
 
         [HttpDelete]
         [Route("Delete_All")]
-        public async Task<IActionResult> DeleteAll()
+        public async Task<IActionResult> DeleteAllClients()
         {
-            // SQL-запрос на сброс последовательности Код_клиента в таблице Klients
-            string query = "ALTER SEQUENCE \"Стоянка\".\"Klients_Code_klient_seq\" RESTART WITH 0";
-
-            await using var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection"));
+            var connectionString = _databaseService.GetConnectionString("DefaultConnection");
+            using var connection = new NpgsqlConnection(connectionString);
             await connection.OpenAsync();
-            using var transaction = connection.BeginTransaction();
-            try
-            {
-                // Удаляем все записи из таблицы Klients
-                await using (var command = new NpgsqlCommand("DELETE FROM \"Стоянка\".\"Klients\"", connection))
-                {
-                    await command.ExecuteNonQueryAsync();
-                }
-                // Сбрасываем последовательность Код_клиента в таблице Klients
-                await using (var command = new NpgsqlCommand(query, connection))
-                {
-                    await command.ExecuteNonQueryAsync();
-                }
-                // Коммитим транзакцию
-                transaction.Commit();
-                // Возвращаем статус 200 OK
-                return Ok();
-            }
-            catch
-            {
-                // Отменяем транзакцию в случае ошибки
-                transaction.Rollback();
-                throw;
-            }
+
+            // Use Dapper to execute the delete query for all clients
+            await connection.ExecuteAsync(
+                "DELETE FROM \"Стоянка\".\"Klients\";"
+            );
+            // Use Dapper to execute the query to reset the sequence for Код_клиента
+            await connection.ExecuteAsync(
+                "ALTER SEQUENCE \"Стоянка\".\"Klients_Code_klient_seq\" RESTART WITH 1;"
+            );
+
+            // Return 200 OK to indicate success
+            return Ok();
         }
     }
 }

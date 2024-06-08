@@ -1,7 +1,11 @@
-﻿namespace WebApplication1.DB
+﻿using System.ComponentModel.DataAnnotations;
+
+namespace WebApplication1.DB
 {
     public class EmailRequest
     {
-        public string Email { get; set; }
+        [Required]
+        [EmailAddress]
+        public required string Email { get; set; }
     }
 }

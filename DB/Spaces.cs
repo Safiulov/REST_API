@@ -2,8 +2,8 @@
 {
     public class Spaces
     {
-        public string Место { get; set; }
-        public string Статус{ get; set; }
+        public required string Место { get; set; }
+        public required string Статус{ get; set; }
         
     }
 }

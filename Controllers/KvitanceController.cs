@@ -19,87 +19,32 @@ namespace WebApplication1.Controllers
         public async Task<IActionResult> GetInvoice(int clientCode)
         {
             var kvitance = new Kvitance();
+
             await using (var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection")))
             {
                 await connection.OpenAsync();
                 // Получаем информацию о клиенте, автомобиле и проживании
-                string sql = "SELECT a.\"ФИО\", a.\"Дата_рождения\", a.\"Почта\", b.\"Госномер\", b.\"Марка\", c.\"Дата_въезда\", c.\"Дата_выезда\", c.\"Стоимость\" " +
-                             "FROM \"Стоянка\".\"Klients\" a " +
-                             "JOIN \"Стоянка\".\"Sales\" c ON a.\"Код_клиента\" = c.\"Код_клиента\" " +
-                             "JOIN \"Стоянка\".\"Auto\" b ON a.\"Код_авто\" = b.\"Код_авто\" " +
-                             "WHERE a.\"Код_клиента\" = @clientCode " +
-                             "ORDER BY c.\"Дата_выезда\" DESC " +
-                             "LIMIT 1";
-                using (var command = new NpgsqlCommand(sql, connection))
+                string sql = "SELECT * FROM \"Стоянка\".\"Select_Sales\" where Код_клиента = @clientCode and  (Дата_выезда >= (select Дата_въезда from  \"Стоянка\".\"Select_Realisation\" where Код_клиента = @clientCode order by Дата_въезда desc limit 1 ) and (Дата_выезда is null or Дата_въезда is not null )) ORDER BY \"Дата_выезда\" DESC LIMIT 1";
+                using var command = new NpgsqlCommand(sql, connection);
+                command.Parameters.AddWithValue("clientCode", clientCode);
+                using NpgsqlDataReader reader = await command.ExecuteReaderAsync();
+                if (await reader.ReadAsync())
                 {
-                    command.Parameters.AddWithValue("clientCode", clientCode);
-                    using NpgsqlDataReader reader = await command.ExecuteReaderAsync();
-                    if (await reader.ReadAsync())
-                    {
-                        kvitance.ФИО = reader.GetFieldValue<string>(0);
-                        kvitance.Дата_рождения = reader.GetFieldValue<DateTime>(1);
-                        kvitance.Почта = reader.GetFieldValue<string>(2);
-                        kvitance.Госномер = reader.GetFieldValue<string>(3);
-                        kvitance.Марка = reader.GetFieldValue<string>(4);
-                        kvitance.Дата_въезда = reader.GetFieldValue<DateTime>(5);
-                        kvitance.Дата_выезда = reader.IsDBNull(6) ? null : reader.GetFieldValue<DateTime?>(6);
-                        kvitance.Стоимость = reader.IsDBNull(7) ? null : reader.GetFieldValue<int?>(7);
-                    }
-                    else
-                    {
-                        // Закрываем соединение перед созданием новой команды
-                        connection.Close();
-                        // Если клиент не найден в таблице "Sales", пытаемся получить дату входа из таблицы "Realisation"
-                        sql = "SELECT a.\"ФИО\", a.\"Дата_рождения\", a.\"Почта\", b.\"Госномер\", b.\"Марка\", c.\"Дата_въезда\",c.\"Стоимость\" " +
-                         "FROM \"Стоянка\".\"Klients\" a " +
-                         "JOIN \"Стоянка\".\"Realisation\" c ON a.\"Код_клиента\" = c.\"Код_клиента\" " +
-                         "JOIN \"Стоянка\".\"Auto\" b ON a.\"Код_авто\" = b.\"Код_авто\" " +
-                        "WHERE a.\"Код_клиента\" = @clientCode " +
-                             "ORDER BY c.\"Дата_въезда\" DESC " +
-                             "LIMIT 1";
-
-                        using var command2 = new NpgsqlCommand(sql, connection);
-                        connection.Open(); // Открываем соединение снова
-                        command2.Parameters.AddWithValue("clientCode", clientCode);
-                        using NpgsqlDataReader reader2 = await command2.ExecuteReaderAsync();
-                        if (await reader2.ReadAsync())
-                        {
-                            kvitance.ФИО = reader2.GetFieldValue<string>(0);
-                            kvitance.Дата_рождения = reader2.GetFieldValue<DateTime>(1);
-                            kvitance.Почта = reader2.GetFieldValue<string>(2);
-                            kvitance.Госномер = reader2.GetFieldValue<string>(3);
-                            kvitance.Марка = reader2.GetFieldValue<string>(4);
-                            kvitance.Дата_въезда = DateTime.Today;
-                            kvitance.Дата_выезда = reader2.GetFieldValue<DateTime>(5);
-                            kvitance.Стоимость = reader2.IsDBNull(6) ? null : reader2.GetFieldValue<int?>(6);
-                        }
-                        else
-                        {
-                            return NotFound("Клиент не найден.");
-                        }
-                    }
-                }
-
-                // Получаем информацию о услугах
-                 sql = "SELECT Название_услуги, Сумма FROM \"Стоянка\".\"Realisation\" WHERE Код_клиента = @clientCode and Место like 'B%' and (Дата_въезда >= (SELECT (Дата_въезда - INTERVAL '1 month') AS Дата_въезда_минус_месяц FROM \"Стоянка\".\"Realisation\" WHERE Код_клиента =@clientCode and Место like 'B%'ORDER BY Дата_въезда DESC LIMIT 1))  ";
-                using var command4 = new NpgsqlCommand(sql, connection);
-               
-                command4.Parameters.AddWithValue("clientCode", clientCode);
-                using NpgsqlDataReader reader4 = await command4.ExecuteReaderAsync();
-                kvitance.Услуги = new List<Invoice>();
-                while (await reader4.ReadAsync())
-                {
-                    kvitance.Услуги.Add(new Invoice { Название = reader4.GetString(0), Стоимость = reader4.GetInt32(1) });
-                    kvitance.Итого += reader4.GetInt32(1);
-                }
-              
-                if (kvitance.Дата_въезда<= DateTime.Now)
-                {
+                    kvitance.ФИО = reader.GetFieldValue<string>(1);
+                    kvitance.Дата_рождения = reader.GetFieldValue<DateTime>(2);
+                    kvitance.Почта = reader.GetFieldValue<string>(3);
+                    kvitance.Госномер = reader.GetFieldValue<string>(4);
+                    kvitance.Марка = reader.GetFieldValue<string>(5);
+                    kvitance.Дата_въезда = reader.GetFieldValue<DateTime>(6);
+                    kvitance.Дата_выезда = reader.IsDBNull(7) ? null : reader.GetFieldValue<DateTime?>(7);
+                    kvitance.Стоимость = reader.IsDBNull(8) ? null : reader.GetFieldValue<int?>(8);
                     connection.Close();
                     connection.Open();
-                    sql = "SELECT Название_услуги, Сумма FROM Стоянка.\"Realisation\" WHERE Код_клиента = @clientCode and Место like 'A%'  and Дата_въезда between (select Дата_въезда from Стоянка.\"Sales\" where Код_клиента = @clientCode  order by \"Дата_въезда\" desc  limit 1) and (select Дата_выезда from Стоянка.\"Sales\" where Код_клиента = @clientCode order by \"Дата_выезда\" desc limit 1)";
+                    sql = "WITH LastDates AS (SELECT Дата_въезда, Дата_выезда FROM Стоянка.\"Sales\" WHERE Код_клиента = @clientCode ORDER BY Дата_въезда DESC, Дата_выезда DESC LIMIT 1)" +
+                        "SELECT Название_услуги, Сумма FROM Стоянка.\"Realisation\" WHERE Код_клиента = @clientCode AND Место LIKE 'A%' " +
+                        "AND Дата_въезда BETWEEN (SELECT Дата_въезда FROM LastDates) AND (SELECT Дата_выезда FROM LastDates);";
                     using var command3 = new NpgsqlCommand(sql, connection);
-                   
+
                     command3.Parameters.AddWithValue("clientCode", clientCode);
                     using NpgsqlDataReader reader3 = await command3.ExecuteReaderAsync();
                     kvitance.Услуги = new List<Invoice>();
@@ -108,8 +53,47 @@ namespace WebApplication1.Controllers
                         kvitance.Услуги.Add(new Invoice { Название = reader3.GetString(0), Стоимость = reader3.GetInt32(1) });
                         kvitance.Итого += reader3.GetInt32(1);
                     }
-                }
 
+                }
+                else
+                {
+                    // Закрываем соединение перед созданием новой команды
+                    connection.Close();
+                    // Если клиент не найден в таблице "Sales", пытаемся получить дату входа из таблицы "Realisation"
+                    sql = "SELECT * FROM \"Стоянка\".\"Select_Realisation\" where Код_клиента = @clientCode   ORDER BY \"Дата_въезда\" DESC\r\n LIMIT 1;";
+                    using var command2 = new NpgsqlCommand(sql, connection);
+                    connection.Open(); // Открываем соединение снова
+                    command2.Parameters.AddWithValue("clientCode", clientCode);
+                    using NpgsqlDataReader reader2 = await command2.ExecuteReaderAsync();
+                    if (await reader2.ReadAsync())
+                    {
+                        kvitance.ФИО = reader2.GetFieldValue<string>(1);
+                        kvitance.Дата_рождения = reader2.GetFieldValue<DateTime>(2);
+                        kvitance.Почта = reader2.GetFieldValue<string>(3);
+                        kvitance.Госномер = reader2.GetFieldValue<string>(4);
+                        kvitance.Марка = reader2.GetFieldValue<string>(5);
+                        kvitance.Дата_въезда = DateTime.Today;
+                        kvitance.Дата_выезда = reader2.GetFieldValue<DateTime>(6);
+                        kvitance.Стоимость = reader2.IsDBNull(7) ? null : reader2.GetFieldValue<int?>(7);
+                        connection.Close();
+                        connection.Open();
+                        // Получаем информацию о услугах
+                        sql = "SELECT Название_услуги, Сумма FROM \"Стоянка\".\"Realisation\" WHERE Код_клиента = @clientCode and Место like 'B%'  and (Дата_въезда >= (SELECT (Дата_въезда - INTERVAL '1 month') AS Дата_въезда_минус_месяц FROM \"Стоянка\".\"Realisation\" WHERE Код_клиента = @clientCode  ORDER BY Дата_въезда DESC LIMIT 1)) ";
+                        using var command4 = new NpgsqlCommand(sql, connection);
+                        command4.Parameters.AddWithValue("clientCode", clientCode);
+                        using NpgsqlDataReader reader4 = await command4.ExecuteReaderAsync();
+                        kvitance.Услуги = new List<Invoice>();
+                        while (await reader4.ReadAsync())
+                        {
+                            kvitance.Услуги.Add(new Invoice { Название = reader4.GetString(0), Стоимость = reader4.GetInt32(1) });
+                            kvitance.Итого += reader4.GetInt32(1);
+                        }
+                    }
+                    else
+                    {
+                        return NotFound("Клиент не найден.");
+                    }
+                }
             }
 
             return Ok(kvitance);
@@ -124,11 +108,7 @@ namespace WebApplication1.Controllers
             // Открываем соединение
             await connection.OpenAsync();
             // Создаем SQL-запрос для получения свободных мест на парковке
-            string sql = "select a.\"Дата_въезда\",a.\"Место\",b.\"Марка\",b.\"Госномер\",c.\"ФИО\" " +
-                         "from \"Стоянка\".\"Sales\" a " +
-                         "join \"Стоянка\".\"Klients\" c on a.\"Код_клиента\"=c.\"Код_клиента\" " +
-                         "join \"Стоянка\".\"Auto\" b on b.\"Код_авто\"=c.\"Код_авто\" " +
-                         "where \"Дата_выезда\" is null";
+            string sql = "SELECT * FROM \"Стоянка\".\"Resreve_Spaces\"";
             // Выполняем запрос и читаем данные из результирующего набора
             await using var command = new NpgsqlCommand(sql, connection);
             var reports = new List<Report_of_free>();
@@ -161,7 +141,7 @@ namespace WebApplication1.Controllers
             // Открываем соединение
             await connection.OpenAsync();
             // Создаем SQL-запрос для получения свободных мест на парковке
-            string sql = "select a.\"Дата_въезда\" as \"Дата_выезда\" ,a.\"Место\",b.\"Марка\",b.\"Госномер\",c.\"ФИО\" from \"Стоянка\".\"Realisation\" a join \"Стоянка\".\"Klients\" c on a.\"Код_клиента\"=c.\"Код_клиента\" join \"Стоянка\".\"Auto\" b on b.\"Код_авто\"=c.\"Код_авто\" where \"Дата_въезда\" > now()";
+            string sql = "SELECT * FROM \"Стоянка\".\"Bron_Spaces\"";
             // Выполняем запрос и читаем данные из результирующего набора
             await using var command = new NpgsqlCommand(sql, connection);
             var reports = new List<Report_of_free>();

@@ -37,7 +37,7 @@ namespace WebApplication1.Controllers
                 using var transaction = connection.BeginTransaction();
                 try
                 {
-                    using (var command = new NpgsqlCommand($"SELECT k.\"ФИО\",k.\"Почта\",k.\"Логин\",k.\"Пароль\", a.\"Марка\",a.\"Цвет\",a.\"Тип\",a.\"Госномер\",a.\"Год\" FROM \"Стоянка\".\"Klients\" as k JOIN \"Стоянка\".\"Auto\" as a ON k.\"Код_авто\" = a.\"Код_авто\" WHERE \"Логин\" = @columnValue;", connection))
+                    using (var command = new NpgsqlCommand($"select * from \"Стоянка\".\"Site_kl_auto_info\" WHERE \"Логин\" = @columnValue;", connection))
                     {
                         command.Parameters.AddWithValue("@columnValue", columnValue);
 
@@ -161,7 +161,7 @@ namespace WebApplication1.Controllers
                                 Дата_рождения = reader.GetFieldValue<DateTime>(2),
                                 Почта = reader.GetFieldValue<string>(3),
                                 Логин = reader.GetFieldValue<string>(4),
-                                Пароль= reader.GetFieldValue<string>(5),
+                                Пароль = reader.GetFieldValue<string>(5),
                                 Код_авто = reader.GetFieldValue<int>(6)
                             };
 
@@ -220,8 +220,8 @@ namespace WebApplication1.Controllers
                                 Код_услуги = reader.GetFieldValue<int>(3),
                                 Название_услуги = reader.IsDBNull(4) ? null : reader.GetFieldValue<string>(4),
                                 Код_клиента = reader.GetFieldValue<int>(5),
-                                ФИО = reader.IsDBNull(6) ? null : reader.GetFieldValue<string>(6),
-                                Госномер = reader.IsDBNull(7) ? null : reader.GetFieldValue<string>(7),
+                                ФИО =  reader.GetFieldValue<string>(6),
+                                Госномер = reader.GetFieldValue<string>(7),
                                 Стоимость = reader.IsDBNull(8) ? null : reader.GetFieldValue<int>(8),
                                 Сумма = reader.IsDBNull(9) ? null : reader.GetFieldValue<int>(9)
                             };
@@ -244,7 +244,7 @@ namespace WebApplication1.Controllers
 
         [HttpPost]
         [Route("AddClientAndCar")]
-       
+
         public IActionResult AddClientAndCar(КлиентАвто клиентАвто)
         {
             if (!ModelState.IsValid)
@@ -618,37 +618,31 @@ namespace WebApplication1.Controllers
         [HttpPost("check-email")]
         public async Task<IActionResult> CheckEmail([FromBody] EmailRequest emailRequest)
         {
-            using var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection"));
-            await connection.OpenAsync();
-
-            // **Added transaction**
-            using var transaction = connection.BeginTransaction();
-            try
+            using (var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection")))
             {
+
+                await connection.OpenAsync();
+
                 string query = "SELECT * FROM \"Стоянка\".\"Klients\" WHERE \"Почта\" = @Email";
-                using NpgsqlCommand command = new(query, connection);
-                command.Parameters.AddWithValue("Email", emailRequest.Email);
+                using (NpgsqlCommand command = new NpgsqlCommand(query, connection))
+                {
+                    command.Parameters.AddWithValue("Email", emailRequest.Email);
 
-                using NpgsqlDataReader reader = await command.ExecuteReaderAsync();
-                if (reader.HasRows)
-                {
-                    // Если найден пользователь с указанным адресом электронной почты, то возвращаем статус 200 OK и объект с полем "success" со значением true
-                    transaction.Commit(); // Commit the transaction
-                    return Ok(new { success = true });
+                    using (NpgsqlDataReader reader = await command.ExecuteReaderAsync())
+                    {
+                        if (reader.HasRows)
+                        {
+                            // Если найден пользователь с указанным адресом электронной почты, то возвращаем статус 200 OK и объект с полем "success" со значением true
+                            return Ok(new { success = true });
+                        }
+                        else
+                        {
+                            // Если пользователь с указанным адресом электронной почты не найден, то возвращаем статус 200 OK и объект с полем "success" со значением false
+                            return Ok(new { success = false });
+                        }
+                    }
                 }
-                else
-                {
-                    // Если пользователь с указанным адресом электронной почты не найден, то возвращаем статус 200 OK и объект с полем "success" со значением false
-                    transaction.Rollback(); // Rollback the transaction
-                    return Ok(new { success = false });
-                }
-            }
-            catch (Exception)
-            {
-                transaction.Rollback(); // Rollback the transaction on error
-                throw; // Rethrow the exception
             }
         }
     }
 }
-
