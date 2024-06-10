@@ -86,7 +86,6 @@ namespace WebApplication1.Controllers
         }
 
         [HttpPost]
-        // Метод для создания новой продажи
         public async Task<IActionResult> Post([FromBody] Sales sales)
         {
             if (!ModelState.IsValid)
@@ -101,46 +100,56 @@ namespace WebApplication1.Controllers
 
             try
             {
-                // Check if space exists
-                var spaceExistsCommand = new NpgsqlCommand("SELECT * FROM \"Стоянка\".\"Spaces\" WHERE \"Место\" = @Место", connection);
-                spaceExistsCommand.Parameters.AddWithValue("Место", sales.Место);
-                var spaceExists = await spaceExistsCommand.ExecuteScalarAsync();
-                if (spaceExists == null)
+                // Проверяем, существует ли место
+                var spaceExists = await connection.ExecuteScalarAsync<bool>(
+                    "SELECT EXISTS(SELECT 1 FROM \"Стоянка\".\"Spaces\" WHERE \"Место\" = @Место)",
+                    new { sales.Место });
+
+                if (!spaceExists)
                 {
                     ModelState.AddModelError(string.Empty, "Место не существует");
                     return BadRequest(ModelState);
                 }
 
-                // Check if space is already occupied
-                var existingRealisationCommand = new NpgsqlCommand("SELECT * FROM \"Стоянка\".\"Sales\" WHERE \"Место\" = @Место and \"Дата_выезда\" is null;", connection);
-                existingRealisationCommand.Parameters.AddWithValue("Место", sales.Место);
-                var existingRealisation = await existingRealisationCommand.ExecuteScalarAsync();
-                if (existingRealisation != null)
+                // Проверяем, занято ли место
+                var existingSale = await connection.QueryFirstOrDefaultAsync<Sales>(
+                    "SELECT * FROM \"Стоянка\".\"Sales\" WHERE \"Место\" = @Место AND \"Дата_выезда\" IS NULL",
+                    new { sales.Место });
+
+                if (existingSale != null)
                 {
                     ModelState.AddModelError(string.Empty, "Данное место уже занято");
                     return BadRequest(ModelState);
                 }
 
-                // Check for time conflicts
-                var timeConflictCommand = new NpgsqlCommand("SELECT * FROM \"Стоянка\".\"Sales\" WHERE \"Место\" = @Место AND ((\"Дата_въезда\" <= @Дата_въезда AND \"Дата_выезда\" >= @Дата_въезда) OR (\"Дата_въезда\" <= @Дата_выезда AND \"Дата_выезда\" >= @Дата_выезда) OR (\"Дата_въезда\" >= @Дата_въезда AND \"Дата_выезда\" <= @Дата_выезда) OR (\"Дата_въезда\" <= @Дата_въезда AND \"Дата_выезда\" IS NULL) OR (\"Дата_въезда\" <= @Дата_выезда AND \"Дата_выезда\" IS NULL))", connection);
-                timeConflictCommand.Parameters.AddWithValue("Место", sales.Место);
-                timeConflictCommand.Parameters.AddWithValue("Дата_въезда", sales.Дата_въезда.ToUniversalTime());
-                timeConflictCommand.Parameters.AddWithValue("Дата_выезда", sales.Дата_выезда.HasValue ? sales.Дата_выезда.Value.ToUniversalTime() : (object)DBNull.Value);
-                var timeConflict = await timeConflictCommand.ExecuteScalarAsync();
-                if (timeConflict != null)
+                // Проверяем наличие конфликтов по времени
+                var timeConflict = await connection.ExecuteScalarAsync<bool>(
+                    "SELECT EXISTS(SELECT 1 FROM \"Стоянка\".\"Sales\" WHERE \"Место\" = @Место AND ((\"Дата_въезда\" <= @Дата_въезда AND (\"Дата_выезда\" >= @Дата_въезда OR \"Дата_выезда\" IS NULL)) OR (\"Дата_въезда\" >= @Дата_въезда AND \"Дата_въезда\" <= @Дата_выезда)))",
+                    new
+                    {
+                        sales.Место,
+                        Дата_въезда = sales.Дата_въезда.ToUniversalTime(),
+                        Дата_выезда = sales.Дата_выезда?.ToUniversalTime()
+                    });
+
+                if (timeConflict)
                 {
                     ModelState.AddModelError(string.Empty, "Выберите другое время");
                     return BadRequest(ModelState);
                 }
 
-                // Insert new sale
-                var insertCommand = new NpgsqlCommand("INSERT INTO \"Стоянка\".\"Sales\"(\"Дата_въезда\", \"Дата_выезда\",  \"Место\", \"Код_клиента\") VALUES (@Дата_въезда, @Дата_выезда, @Место, @Код_клиента);", connection);
-                insertCommand.Parameters.AddWithValue("Дата_въезда", sales.Дата_въезда.ToUniversalTime());
-                insertCommand.Parameters.AddWithValue("Дата_выезда", sales.Дата_выезда.HasValue ? sales.Дата_выезда.Value.ToUniversalTime() : (object)DBNull.Value);
-                insertCommand.Parameters.AddWithValue("Место", sales.Место);
-                insertCommand.Parameters.AddWithValue("Код_клиента", sales.Код_клиента);
+                // Вставляем новую продажу
+                var rowsAffected = await connection.ExecuteAsync(
+                    "INSERT INTO \"Стоянка\".\"Sales\"(\"Дата_въезда\", \"Дата_выезда\", \"Место\", \"Код_клиента\") VALUES (@Дата_въезда, @Дата_выезда, @Место, @Код_клиента);",
+                    new
+                    {
+                        Дата_въезда = sales.Дата_въезда.ToUniversalTime(),
+                        Дата_выезда = sales.Дата_выезда?.ToUniversalTime(),
+                        sales.Место,
+                        sales.Код_клиента
+                    },
+                    transaction);
 
-                int rowsAffected = await insertCommand.ExecuteNonQueryAsync();
                 if (rowsAffected == 1)
                 {
                     transaction.Commit();
@@ -182,25 +191,22 @@ namespace WebApplication1.Controllers
         [HttpDelete]
         public async Task<IActionResult> DeleteAll()
         {
-            string deleteQuery = "DELETE FROM \"Стоянка\".\"Sales\"";
-            string resetSequenceQuery = "ALTER SEQUENCE \"Стоянка\".\"Sales_Code_sale_seq\" RESTART WITH 0";
+            var connectionString = _databaseService.GetConnectionString("DefaultConnection");
+            using var connection = new NpgsqlConnection(connectionString);
+            await connection.OpenAsync();
 
-            using var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection"));
-            try
-            {
-                // Используем Dapper для выполнения DELETE-запроса
-                await connection.ExecuteAsync(deleteQuery);
+            // Используем Dapper для выполнения запроса на удаление всех автомобилей
+            await connection.ExecuteAsync(
+                "DELETE FROM \"Стоянка\".\"Sales\";"
+            );
 
-                // Используем Dapper для выполнения ALTER SEQUENCE-запроса
-                await connection.ExecuteAsync(resetSequenceQuery);
+            // Используем Dapper для выполнения запроса на перезапуск последовательности идентификаторов автомобилей
+            await connection.ExecuteAsync(
+                "ALTER SEQUENCE \"Стоянка\".\"Sales_Code_sale_seq\" RESTART WITH 0;"
+            );
 
-                return Ok(); // Возвращаем код 200 OK, если операция прошла успешно
-            }
-            catch (Exception ex)
-            {
-                // Возвращаем код 500 Internal Server Error и сообщение об ошибке, если операция не удалась
-                return StatusCode(500, ex.Message);
-            }
+            // Возвращаем статус 200 OK
+            return Ok();
         }
     }
 }

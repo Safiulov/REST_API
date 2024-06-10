@@ -120,12 +120,14 @@ namespace WebApplication1.Controllers
             {
                 return BadRequest(ModelState);
             }
+
             // Проверяем дополнительные условия для места и кода услуги
             if (realisation.Место.StartsWith("A") && (realisation.Код_услуги == 1 || realisation.Код_услуги == 2))
             {
                 ModelState.AddModelError(string.Empty, "Ошибка: место начинается с 'A' и код_услуги равен 1 или 2");
                 return BadRequest(ModelState);
             }
+
             if (realisation.Место.StartsWith("B") && (realisation.Код_услуги == 3))
             {
                 ModelState.AddModelError(string.Empty, "Ошибка: Услуга недоступна в данном секторе");
@@ -133,20 +135,18 @@ namespace WebApplication1.Controllers
             }
 
             // Создаем подключение к базе данных PostgreSQL
-            await using var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection"));
-            // Открываем соединение
-            await connection.OpenAsync();
-
-            // Begin transaction
-            using var transaction = connection.BeginTransaction();
-            try
+            using (var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection")))
             {
+                // Открываем соединение
+                await connection.OpenAsync();
+
+                // Проверяем, есть ли уже занятое место для услуги 1 или 2 в секторе B
                 if (realisation.Место.StartsWith("B") && (realisation.Код_услуги == 1 || realisation.Код_услуги == 2))
                 {
-                    // Check if space is already occupied
-                    await using var existingRealisationCommand = new NpgsqlCommand("SELECT * FROM \"Стоянка\".\"Realisation\" WHERE \"Место\" = @Место and Дата_въезда >= NOW() and (Код_услуги = 1 or Код_услуги = 2)", connection);
-                    existingRealisationCommand.Parameters.AddWithValue("Место", realisation.Место);
-                    var existingRealisation = await existingRealisationCommand.ExecuteScalarAsync();
+                    var existingRealisation = await connection.QueryFirstOrDefaultAsync<Realisation>(
+                        "SELECT * FROM \"Стоянка\".\"Realisation\" WHERE \"Место\" = @Место AND Дата_въезда >= NOW() AND (Код_услуги = 1 OR Код_услуги = 2)",
+                        new { Место = realisation.Место });
+
                     if (existingRealisation != null)
                     {
                         ModelState.AddModelError(string.Empty, "Данное место уже занято");
@@ -154,20 +154,20 @@ namespace WebApplication1.Controllers
                     }
                 }
 
-                // Создаем SQL-запрос для вставки записи в таблицу Realisation
-                await using var command = new NpgsqlCommand("INSERT INTO \"Стоянка\".\"Realisation\"(\"Дата_въезда\", \"Место\",  \"Код_услуги\", \"Код_клиента\") VALUES (@Дата_въезда, @Место, @Код_услуги, @Код_клиента);", connection, transaction);
-                // Добавляем параметры для запроса
-                command.Parameters.AddWithValue("Дата_въезда", realisation.Дата_въезда.ToUniversalTime());
-                command.Parameters.AddWithValue("Место", realisation.Место);
-                command.Parameters.AddWithValue("Код_услуги", realisation.Код_услуги);
-                command.Parameters.AddWithValue("Код_клиента", realisation.Код_клиента);
-                // Выполняем SQL-запрос и получаем количество затронутых строк
-                int rowsAffected = await command.ExecuteNonQueryAsync();
+                // Вставляем новую запись в таблицу Realisation
+                int rowsAffected = await connection.ExecuteAsync(
+                    "INSERT INTO \"Стоянка\".\"Realisation\"(\"Дата_въезда\", \"Место\", \"Код_услуги\", \"Код_клиента\") VALUES (@Дата_въезда, @Место, @Код_услуги, @Код_клиента);",
+                    new
+                    {
+                        Дата_въезда = realisation.Дата_въезда.ToUniversalTime(),
+                        realisation.Место,
+                        realisation.Код_услуги,
+                        realisation.Код_клиента
+                    });
+
                 // Если запись успешно вставлена, возвращаем код ответа 200 (OK)
                 if (rowsAffected == 1)
                 {
-                    // Commit transaction
-                    transaction.Commit();
                     return Ok();
                 }
                 // Если запись не удалось вставить, возвращаем код ответа 400 (Bad Request)
@@ -175,12 +175,6 @@ namespace WebApplication1.Controllers
                 {
                     return BadRequest(ModelState);
                 }
-            }
-            catch (Exception)
-            {
-                // Rollback transaction in case of an error
-                transaction.Rollback();
-                throw;
             }
         }
 
@@ -215,19 +209,22 @@ namespace WebApplication1.Controllers
         [HttpDelete]
         public async Task<IActionResult> DeleteAll()
         {
-            // Создаем подключение к базе данных PostgreSQL
-            using var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection"));
-            // Открываем соединение
+            var connectionString = _databaseService.GetConnectionString("DefaultConnection");
+            using var connection = new NpgsqlConnection(connectionString);
             await connection.OpenAsync();
 
-            // Создаем SQL-запрос для удаления всех записей из таблицы Realisation
-            string deleteQuery = @"DELETE FROM ""Стоянка"".""Realisation"";";
+            // Используем Dapper для выполнения запроса на удаление всех автомобилей
+            await connection.ExecuteAsync(
+                "DELETE FROM \"Стоянка\".\"Realisation\";"
+            );
 
-            // Выполняем запрос с использованием Dapper
-            int rowsAffected = await connection.ExecuteAsync(deleteQuery);
+            // Используем Dapper для выполнения запроса на перезапуск последовательности идентификаторов автомобилей
+            await connection.ExecuteAsync(
+                "ALTER SEQUENCE \"Стоянка\".\"Realisation_Code_seq\" RESTART WITH 0;"
+            );
 
-            // Если записи успешно удалены, возвращаем код ответа 200 (OK)
-            return Ok(rowsAffected);
+            // Возвращаем статус 200 OK
+            return Ok();
         }
     }
 }

@@ -25,8 +25,6 @@ namespace WebApplication1.Controllers
             {
                 return BadRequest("Не указаны параметры для поиска");
             }
-
-         
                 using var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection"));
                 // Создаем SQL-запрос для выборки данных о тарифах по указанному столбцу
                 string query = $"SELECT * FROM \"Стоянка\".\"Tarifs\" WHERE cast({columnName} as text) ILIKE @columnValue";

@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Dapper;
+using Microsoft.AspNetCore.Mvc;
 using Npgsql;
 using WebApplication1.DB;
 
@@ -24,7 +25,10 @@ namespace WebApplication1.Controllers
             {
                 await connection.OpenAsync();
                 // Получаем информацию о клиенте, автомобиле и проживании
-                string sql = "SELECT * FROM \"Стоянка\".\"Select_Sales\" where Код_клиента = @clientCode and  (Дата_выезда >= (select Дата_въезда from  \"Стоянка\".\"Select_Realisation\" where Код_клиента = @clientCode order by Дата_въезда desc limit 1 ) and (Дата_выезда is null or Дата_въезда is not null )) ORDER BY \"Дата_выезда\" DESC LIMIT 1";
+                string sql = "SELECT * FROM \"Стоянка\".\"Select_Sales\" AS sales WHERE Код_клиента = @clientCode AND " +
+                    "(NOT EXISTS (SELECT 1 FROM \"Стоянка\".\"Select_Realisation\" AS realisation WHERE realisation.Код_клиента = sales.Код_клиента AND Место LIKE 'B%')" +
+                    "OR (Дата_выезда >= (SELECT Дата_въезда FROM \"Стоянка\".\"Select_Realisation\" AS realisation WHERE realisation.Код_клиента = sales.Код_клиента " +
+                    "AND Место LIKE 'B%' ORDER BY Дата_въезда DESC LIMIT 1)))ORDER BY Дата_выезда DESC LIMIT 1;";
                 using var command = new NpgsqlCommand(sql, connection);
                 command.Parameters.AddWithValue("clientCode", clientCode);
                 using NpgsqlDataReader reader = await command.ExecuteReaderAsync();
@@ -72,13 +76,43 @@ namespace WebApplication1.Controllers
                         kvitance.Почта = reader2.GetFieldValue<string>(3);
                         kvitance.Госномер = reader2.GetFieldValue<string>(4);
                         kvitance.Марка = reader2.GetFieldValue<string>(5);
-                        kvitance.Дата_въезда = DateTime.Today;
                         kvitance.Дата_выезда = reader2.GetFieldValue<DateTime>(6);
+
+                        // Добавляем проверку кода услуги
+                        int serviceCode = Convert.ToInt32(reader2.GetFieldValue<int>(9)); // Предполагается, что код услуги находится в 8-м столбце
+                        if (serviceCode == 1)
+                        {
+                            kvitance.Дата_въезда = kvitance.Дата_выезда.HasValue ? kvitance.Дата_выезда.Value.AddMonths(-1) : (DateTime?)null;
+                        }
+                        else if (serviceCode == 2)
+                        {
+                            kvitance.Дата_въезда = DateTime.Now;
+                        }
+
                         kvitance.Стоимость = reader2.IsDBNull(7) ? null : reader2.GetFieldValue<int?>(7);
-                        connection.Close();
-                        connection.Open();
+                    connection.Close();
+                    connection.Open();
+
                         // Получаем информацию о услугах
-                        sql = "SELECT Название_услуги, Сумма FROM \"Стоянка\".\"Realisation\" WHERE Код_клиента = @clientCode and Место like 'B%'  and (Дата_въезда >= (SELECT (Дата_въезда - INTERVAL '1 month') AS Дата_въезда_минус_месяц FROM \"Стоянка\".\"Realisation\" WHERE Код_клиента = @clientCode  ORDER BY Дата_въезда DESC LIMIT 1)) ";
+                        if (serviceCode == 1)
+                        {
+                            kvitance.Дата_въезда = kvitance.Дата_выезда.HasValue ? kvitance.Дата_выезда.Value.AddMonths(-1) : (DateTime?)null;
+                           sql= "SELECT Название_услуги, Сумма FROM \"Стоянка\".\"Realisation\" " +
+                                           "WHERE Код_клиента = @clientCode and Место like 'B%'  and" +
+                                           "(Дата_въезда >= (SELECT (Дата_въезда - INTERVAL '1 month') AS Дата_въезда_минус_месяц FROM \"Стоянка\".\"Realisation\" WHERE Код_клиента = @clientCode  ORDER BY Дата_въезда DESC LIMIT 1)) ";
+                        }
+                        else if (serviceCode == 2)
+                        {
+                            kvitance.Дата_въезда = DateTime.Now;
+                           sql = "SELECT Название_услуги, Сумма FROM \"Стоянка\".\"Realisation\" " +
+                                           "WHERE Код_клиента = @clientCode and Место like 'B%'  and" +
+                                           "(Дата_въезда >= (SELECT (Дата_въезда - INTERVAL '1 year') AS Дата_въезда_минус_год FROM \"Стоянка\".\"Realisation\" WHERE Код_клиента = @clientCode  ORDER BY Дата_въезда DESC LIMIT 1)) ";
+                        }
+                        else
+                        {
+                           sql = "SELECT Название_услуги, Сумма FROM \"Стоянка\".\"Realisation\" " +
+                                           "WHERE Код_клиента = @clientCode and Место like 'B%' ORDER BY Дата_въезда DESC LIMIT 1)) ";
+                        }
                         using var command4 = new NpgsqlCommand(sql, connection);
                         command4.Parameters.AddWithValue("clientCode", clientCode);
                         using NpgsqlDataReader reader4 = await command4.ExecuteReaderAsync();
@@ -99,34 +133,19 @@ namespace WebApplication1.Controllers
             return Ok(kvitance);
         }
 
+
         [HttpGet]
         [Route("Free")]
         public async Task<IActionResult> Free()
         {
             // Создаем подключение к базе данных PostgreSQL
-            await using var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection"));
+            using var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection"));
             // Открываем соединение
             await connection.OpenAsync();
             // Создаем SQL-запрос для получения свободных мест на парковке
             string sql = "SELECT * FROM \"Стоянка\".\"Resreve_Spaces\"";
-            // Выполняем запрос и читаем данные из результирующего набора
-            await using var command = new NpgsqlCommand(sql, connection);
-            var reports = new List<Report_of_free>();
-            await using (NpgsqlDataReader reader = command.ExecuteReader())
-            {
-                while (await reader.ReadAsync())
-                {
-                    // Создаем объекты Report_of_free и добавляем их в список
-                    reports.Add(new Report_of_free
-                    {
-                        Дата_въезда = await reader.GetFieldValueAsync<DateTime>(0),
-                        Место = await reader.GetFieldValueAsync<String>(1),
-                        Марка = await reader.GetFieldValueAsync<string>(2),
-                        Госномер = await reader.GetFieldValueAsync<string>(3),
-                        ФИО = await reader.GetFieldValueAsync<string>(4)
-                    });
-                }
-            }
+            // Выполняем запрос и получаем результаты в виде списка объектов Report_of_free
+            var reports = await connection.QueryAsync<Report_of_free>(sql);
             // Возвращаем код ответа 200 (OK) и список отчетов о свободных местах на парковке
             return Ok(reports);
         }
@@ -137,29 +156,16 @@ namespace WebApplication1.Controllers
         public async Task<IActionResult> FreeBron()
         {
             // Создаем подключение к базе данных PostgreSQL
-            await using var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection"));
+            using var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection"));
             // Открываем соединение
             await connection.OpenAsync();
+
             // Создаем SQL-запрос для получения свободных мест на парковке
             string sql = "SELECT * FROM \"Стоянка\".\"Bron_Spaces\"";
-            // Выполняем запрос и читаем данные из результирующего набора
-            await using var command = new NpgsqlCommand(sql, connection);
-            var reports = new List<Report_of_free>();
-            await using (NpgsqlDataReader reader = command.ExecuteReader())
-            {
-                while (await reader.ReadAsync())
-                {
-                    // Создаем объекты Report_of_free и добавляем их в список
-                    reports.Add(new Report_of_free
-                    {
-                        Дата_въезда = await reader.GetFieldValueAsync<DateTime>(0),
-                        Место = await reader.GetFieldValueAsync<String>(1),
-                        Марка = await reader.GetFieldValueAsync<string>(2),
-                        Госномер = await reader.GetFieldValueAsync<string>(3),
-                        ФИО = await reader.GetFieldValueAsync<string>(4)
-                    });
-                }
-            }
+
+            // Выполняем запрос и читаем данные в список объектов Report_of_free
+            var reports = await connection.QueryAsync<Report_of_free>(sql);
+
             // Возвращаем код ответа 200 (OK) и список отчетов о свободных местах на парковке
             return Ok(reports);
         }
@@ -168,37 +174,22 @@ namespace WebApplication1.Controllers
         [Route("Period")]
         public async Task<IActionResult> Period(DateTime date_in, DateTime date_out)
         {
-            // Создаем список для хранения отчета за период
-            List<Period> period = new();
             // Создаем подключение к базе данных PostgreSQL
-            await using (var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection")))
-            {
-                // Открываем соединение
-                await connection.OpenAsync();
-                // Создаем SQL-запрос для получения отчета за период
-                string sql = "SELECT r.\"Код_услуги\", s.\"Название\", r.\"Дата_въезда\", kl.\"ФИО\", kl.\"Почта\", r.\"Сумма\"\r\nFROM \"Стоянка\".\"Realisation\" r\r\nJOIN \"Стоянка\".\"Service\" s ON r.\"Код_услуги\" = s.\"Код_услуги\"\r\nJOIN \"Стоянка\".\"Klients\" kl ON r.\"Код_клиента\" = kl.\"Код_клиента\"\r\nWHERE r.\"Дата_въезда\" BETWEEN @date_in AND @date_out\r\nGROUP BY r.\"Код_услуги\", s.\"Название\", r.\"Дата_въезда\", kl.\"ФИО\", kl.\"Почта\",r.\"Сумма\"\r\nORDER BY r.\"Дата_въезда\";";
-                // Создаем команду для выполнения SQL-запроса
-                await using var command = new NpgsqlCommand(sql, connection);
-                // Добавляем параметры для указания диапазона дат
-                command.Parameters.AddWithValue("date_in", date_in);
-                command.Parameters.AddWithValue("date_out", date_out);
-                // Выполняем SQL-запрос и читаем данные из результирующего набора
-                await using NpgsqlDataReader reader = await command.ExecuteReaderAsync();
-                while (await reader.ReadAsync())
-                {
-                    // Создаем объекты Period и добавляем их в список
-                    var report = new Period
-                    {
-                        Код_услуги = await reader.GetFieldValueAsync<int>(0),
-                        Название = await reader.GetFieldValueAsync<string>(1),
-                        Дата_въезда = await reader.GetFieldValueAsync<DateTime>(2),
-                        ФИО = await reader.GetFieldValueAsync<string>(3),
-                        Почта = await reader.GetFieldValueAsync<string>(4),
-                        Сумма = await reader.GetFieldValueAsync<int>(5)
-                    };
-                    period.Add(report);
-                }
-            }
+            using var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection"));
+            // Открываем соединение
+            await connection.OpenAsync();
+
+            // Создаем SQL-запрос для получения отчета за период
+            string sql = @"
+            SELECT r.""Код_услуги"", s.""Название"", r.""Дата_въезда"", kl.""ФИО"", kl.""Почта"", r.""Сумма""
+            FROM ""Стоянка"".""Realisation"" r
+            JOIN ""Стоянка"".""Service"" s ON r.""Код_услуги"" = s.""Код_услуги""
+            JOIN ""Стоянка"".""Klients"" kl ON r.""Код_клиента"" = kl.""Код_клиента""
+            WHERE r.""Дата_въезда"" >= @date_in AND r.""Дата_въезда"" <= @date_out";
+
+            // Выполняем запрос и получаем список отчетов за период
+            var period = await connection.QueryAsync<Period>(sql, new { date_in, date_out });
+
             // Возвращаем код ответа 200 (OK) и список отчетов за период
             return Ok(period);
         }
@@ -207,36 +198,20 @@ namespace WebApplication1.Controllers
         [Route("Period_Sales")]
         public async Task<IActionResult> Period_Sales(DateTime date_in, DateTime date_out)
         {
-            // Создаем список для хранения отчета о продажах за период
-            List<Period_Sales> sales = new();
             // Создаем подключение к базе данных PostgreSQL
-            await using (var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection")))
-            {
-                // Открываем соединение
-                await connection.OpenAsync();
-                // Создаем SQL-запрос для получения отчета о продажах за период
-                string sql = "SELECT \"Дата_въезда\",\"Дата_выезда\",\"Тариф\",\"Время_стоянки\",\"Стоимость\" FROM \"Стоянка\".\"Sales\" WHERE (\"Дата_въезда\" >= @date_in AND \"Дата_выезда\" <= @date_out);";
-                // Создаем команду для выполнения SQL-запроса
-                await using var command = new NpgsqlCommand(sql, connection);
-                // Добавляем параметры для указания диапазона дат
-                command.Parameters.AddWithValue("date_in", date_in);
-                command.Parameters.AddWithValue("date_out", date_out);
-                // Выполняем SQL-запрос и читаем данные из результирующего набора
-                await using NpgsqlDataReader reader = await command.ExecuteReaderAsync();
-                while (await reader.ReadAsync())
-                {
-                    // Создаем объекты Period_Sales и добавляем их в список
-                    var report = new Period_Sales
-                    {
-                        Дата_въезда = await reader.GetFieldValueAsync<DateTime>(0),
-                        Дата_выезда = reader.IsDBNull(1) ? null : await reader.GetFieldValueAsync<DateTime>(1),
-                        Тариф = reader.IsDBNull(2) ? null : await reader.GetFieldValueAsync<int>(2),
-                        Время_стоянки = reader.IsDBNull(3) ? null : await reader.GetFieldValueAsync<int>(3),
-                        Стоимость = reader.IsDBNull(4) ? null : await reader.GetFieldValueAsync<int>(4),
-                    };
-                    sales.Add(report);
-                }
-            }
+            using var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection"));
+            // Открываем соединение
+            await connection.OpenAsync();
+
+            // Создаем SQL-запрос для получения отчета о продажах за период
+            string sql = @"
+            SELECT ""Дата_въезда"", ""Дата_выезда"", ""Тариф"", ""Время_стоянки"", ""Стоимость""
+            FROM ""Стоянка"".""Sales""
+            WHERE ""Дата_въезда"" >= @date_in AND ""Дата_выезда"" <= @date_out;";
+
+            // Выполняем запрос и получаем список отчетов о продажах за период
+            var sales = await connection.QueryAsync<Period_Sales>(sql, new { date_in, date_out });
+
             // Возвращаем код ответа 200 (OK) и список отчетов о продажах за период
             return Ok(sales);
         }

@@ -15,8 +15,9 @@ namespace WebApplication1.DB
        
         public  string Марка { get; set; }
         public int? Стоимость { get; set; }
-        public  DateTime Дата_въезда{ get; set; }
+        public  DateTime? Дата_въезда{ get; set; }
         public DateTime? Дата_выезда { get; set; }
+       
         public List<Invoice> Услуги { get; set; }
         public int Итого { get; set; }
     }

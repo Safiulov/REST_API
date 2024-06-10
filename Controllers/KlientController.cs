@@ -91,58 +91,40 @@ namespace WebApplication1.Controllers
             {
                 return BadRequest(ModelState);
             }
-            int rowsAffected = 0;
-            string hashedPassword = string.Empty;
 
-            await using var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection"));
-            await connection.OpenAsync();
+            string hashedPassword = BCrypt.Net.BCrypt.HashPassword(klient.Пароль);
 
-            await using var transaction = connection.BeginTransaction();
-            try
+            using var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection"));
+            // Проверка на существование клиента с таким же логином
+            var count = await connection.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM \"Стоянка\".\"Klients\" WHERE \"Логин\" = @Логин;", new { klient.Логин });
+            if (count > 0)
             {
-                // Проверка на существование клиента с таким же логином
-                await using (var command = new NpgsqlCommand("SELECT COUNT(*) FROM \"Стоянка\".\"Klients\" WHERE \"Логин\" = @Логин;", connection))
-                {
-                    command.Parameters.AddWithValue("Логин", klient.Логин);
-                    var count = await command.ExecuteScalarAsync();
-                    if (count is long countValue && countValue > 0)
-                    {
-                        await transaction.RollbackAsync();
-                        return BadRequest(new { error = "Клиент с таким логином уже существует" });
-                    }
-                }
-                // Хеширование пароля
-                hashedPassword = BCrypt.Net.BCrypt.HashPassword(klient.Пароль);
-                // Добавление нового клиента в базу данных
-                await using (var command = new NpgsqlCommand("INSERT INTO \"Стоянка\".\"Klients\"(\"ФИО\", \"Дата_рождения\", \"Почта\", \"Логин\", \"Пароль\",\"Код_авто\") VALUES (@ФИО, @Дата_рождения, @Почта, @Логин, @Пароль,@Код_авто);", connection))
-                {
-                    command.Parameters.AddWithValue("ФИО", klient.ФИО);
-                    command.Parameters.AddWithValue("Дата_рождения", klient.Дата_рождения);
-                    command.Parameters.AddWithValue("Почта", klient.Почта);
-                    command.Parameters.AddWithValue("Логин", klient.Логин);
-                    command.Parameters.AddWithValue("Пароль", hashedPassword); // Используем хешированный пароль
-                    command.Parameters.AddWithValue("Код_авто", klient.Код_авто);
-                    rowsAffected = await command.ExecuteNonQueryAsync();
-                }
-
-                if (rowsAffected == 1)
-                {
-                    // Возвращаем созданного клиента, если он был успешно добавлен
-                    await transaction.CommitAsync();
-                    return CreatedAtAction(nameof(GetAllClients), new { id = klient.Код_клиента }, klient);
-                }
-                else
-                {
-                    // Возвращаем ошибку, если клиент не был добавлен
-                    await transaction.RollbackAsync();
-                    return BadRequest("Некорректно");
-                }
+                return BadRequest(new { error = "Клиент с таким логином уже существует" });
             }
-            catch (Exception ex)
+
+            // Добавление нового клиента в базу данных
+            var rowsAffected = await connection.ExecuteAsync(@"
+            INSERT INTO ""Стоянка"".""Klients""(""ФИО"", ""Дата_рождения"", ""Почта"", ""Логин"", ""Пароль"",""Код_авто"")
+            VALUES (@ФИО, @Дата_рождения, @Почта, @Логин, @Пароль,@Код_авто);",
+                new
+                {
+                    klient.ФИО,
+                    klient.Дата_рождения,
+                    klient.Почта,
+                    klient.Логин,
+                    Пароль = hashedPassword, // Используем хешированный пароль
+                    klient.Код_авто
+                });
+
+            if (rowsAffected == 1)
             {
-                // Если произошла ошибка, откатываем транзакцию
-                await transaction.RollbackAsync();
-                return StatusCode(StatusCodes.Status500InternalServerError, new { error = ex.Message });
+                // Возвращаем созданного клиента, если он был успешно добавлен
+                return CreatedAtAction(nameof(GetAllClients), new { id = klient.Код_клиента }, klient);
+            }
+            else
+            {
+                // Возвращаем ошибку, если клиент не был добавлен
+                return BadRequest("Некорректно");
             }
         }
 
@@ -185,7 +167,7 @@ namespace WebApplication1.Controllers
             );
             // Use Dapper to execute the query to reset the sequence for Код_клиента
             await connection.ExecuteAsync(
-                "ALTER SEQUENCE \"Стоянка\".\"Klients_Code_klient_seq\" RESTART WITH 1;"
+                "ALTER SEQUENCE \"Стоянка\".\"Klients_Code_klient_seq\" RESTART WITH 0;"
             );
 
             // Return 200 OK to indicate success

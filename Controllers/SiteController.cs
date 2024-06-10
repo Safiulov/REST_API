@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Dapper;
+using Microsoft.AspNetCore.Mvc;
 using Npgsql;
 using WebApplication1.DB;
 
@@ -28,49 +29,17 @@ namespace WebApplication1.Controllers
 
             columnValue = columnValue.Trim();
 
-            var result = new List<AutoClientDto>();
-
-            await using (var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection")))
+            using (var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection")))
             {
                 await connection.OpenAsync();
 
-                using var transaction = connection.BeginTransaction();
-                try
-                {
-                    using (var command = new NpgsqlCommand($"select * from \"Стоянка\".\"Site_kl_auto_info\" WHERE \"Логин\" = @columnValue;", connection))
-                    {
-                        command.Parameters.AddWithValue("@columnValue", columnValue);
+                // Используем Dapper для выполнения запроса и получения результатов
+                var result = await connection.QueryAsync<AutoClientDto>(
+                    @"SELECT * FROM ""Стоянка"".""Site_kl_auto_info"" WHERE ""Логин"" = @columnValue;",
+                    new { columnValue });
 
-                        await using var reader = await command.ExecuteReaderAsync();
-                        while (await reader.ReadAsync())
-                        {
-                            var auto = new AutoClientDto
-                            {
-                                FIO = await reader.GetFieldValueAsync<string>(0),
-                                Email = await reader.GetFieldValueAsync<string>(1),
-                                Login = await reader.GetFieldValueAsync<string>(2),
-                                Password = await reader.GetFieldValueAsync<string>(3),
-                                Mark = await reader.GetFieldValueAsync<string>(4),
-                                Color = await reader.GetFieldValueAsync<string>(5),
-                                Type = await reader.GetFieldValueAsync<string>(6),
-                                GovernmentNumber = await reader.GetFieldValueAsync<string>(7),
-                                Year = await reader.GetFieldValueAsync<int>(8)
-                            };
-
-                            result.Add(auto);
-                        }
-                    }
-
-                    transaction.Commit();
-                }
-                catch (Exception)
-                {
-                    transaction.Rollback();
-                    throw;
-                }
+                return Ok(result);
             }
-
-            return Ok(result);
         }
 
         [HttpGet]

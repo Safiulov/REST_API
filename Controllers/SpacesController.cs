@@ -108,22 +108,17 @@ namespace WebApplication1.Controllers
         [Route("Delete_All")]
         public async Task<IActionResult> DeleteAll()
         {
-            
-                using var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection"));
-                // Создаем SQL-запрос для удаления всех мест
-                string query = "DELETE FROM \"Стоянка\".\"Spaces\";";
 
-                // Используем Dapper для выполнения удаления данных
-                int rowsAffected = await connection.ExecuteAsync(query);
+            var connectionString = _databaseService.GetConnectionString("DefaultConnection");
+            using var connection = new NpgsqlConnection(connectionString);
+            await connection.OpenAsync();
 
-                if (rowsAffected > 0)
-                {
-                    return Ok();
-                }
-                else
-                {
-                    return NotFound();
-                }
+            // Используем Dapper для выполнения запроса на удаление всех автомобилей
+            await connection.ExecuteAsync(
+                "DELETE FROM \"Стоянка\".\"Spaces\";"
+            );
+            // Возвращаем статус 200 OK
+            return Ok();
 
         }
     }
