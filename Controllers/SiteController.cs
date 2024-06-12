@@ -1,5 +1,4 @@
-﻿using Dapper;
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using Npgsql;
 using WebApplication1.DB;
 
@@ -24,22 +23,54 @@ namespace WebApplication1.Controllers
         {
             if (string.IsNullOrWhiteSpace(columnValue))
             {
-                return BadRequest("Column value cannot be null or empty");
+                return BadRequest("Значение не может быть пустым");
             }
 
             columnValue = columnValue.Trim();
 
-            using (var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection")))
+            var result = new List<AutoClientDto>();
+
+            await using (var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection")))
             {
                 await connection.OpenAsync();
 
-                // Используем Dapper для выполнения запроса и получения результатов
-                var result = await connection.QueryAsync<AutoClientDto>(
-                    @"SELECT * FROM ""Стоянка"".""Site_kl_auto_info"" WHERE ""Логин"" = @columnValue;",
-                    new { columnValue });
+                using var transaction = connection.BeginTransaction();
+                try
+                {
+                    using (var command = new NpgsqlCommand($"SELECT k.\"ФИО\",k.\"Почта\",k.\"Логин\",k.\"Пароль\", a.\"Марка\",a.\"Цвет\",a.\"Тип\",a.\"Госномер\",a.\"Год\" FROM \"Стоянка\".\"Klients\" as k JOIN \"Стоянка\".\"Auto\" as a ON k.\"Код_авто\" = a.\"Код_авто\" WHERE \"Логин\" = @columnValue;", connection))
+                    {
+                        command.Parameters.AddWithValue("@columnValue", columnValue);
 
-                return Ok(result);
+                        await using var reader = await command.ExecuteReaderAsync();
+                        while (await reader.ReadAsync())
+                        {
+                            var auto = new AutoClientDto
+                            {
+                                FIO = await reader.GetFieldValueAsync<string>(0),
+                                Email = await reader.GetFieldValueAsync<string>(1),
+                                Login = await reader.GetFieldValueAsync<string>(2),
+                                Password = await reader.GetFieldValueAsync<string>(3),
+                                Mark = await reader.GetFieldValueAsync<string>(4),
+                                Color = await reader.GetFieldValueAsync<string>(5),
+                                Type = await reader.GetFieldValueAsync<string>(6),
+                                GovernmentNumber = await reader.GetFieldValueAsync<string>(7),
+                                Year = await reader.GetFieldValueAsync<int>(8)
+                            };
+
+                            result.Add(auto);
+                        }
+                    }
+
+                    transaction.Commit();
+                }
+                catch (Exception)
+                {
+                    transaction.Rollback();
+                    throw;
+                }
             }
+
+            return Ok(result);
         }
 
         [HttpGet]
@@ -48,7 +79,7 @@ namespace WebApplication1.Controllers
         {
             if (string.IsNullOrWhiteSpace(columnValue))
             {
-                return BadRequest("Column value cannot be null or empty");
+                return BadRequest("Значение не может быть пустым");
             }
 
             columnValue = columnValue.Trim();
@@ -102,7 +133,7 @@ namespace WebApplication1.Controllers
         {
             if (string.IsNullOrWhiteSpace(columnValue))
             {
-                return BadRequest("Column value cannot be null or empty");
+                return BadRequest("Значение не может быть пустым");
             }
 
             columnValue = columnValue.Trim();
@@ -158,7 +189,7 @@ namespace WebApplication1.Controllers
         {
             if (string.IsNullOrWhiteSpace(columnValue))
             {
-                return BadRequest("Column value cannot be null or empty");
+                return BadRequest("Значение не может быть пустым");
             }
 
             columnValue = columnValue.Trim();
@@ -189,8 +220,8 @@ namespace WebApplication1.Controllers
                                 Код_услуги = reader.GetFieldValue<int>(3),
                                 Название_услуги = reader.IsDBNull(4) ? null : reader.GetFieldValue<string>(4),
                                 Код_клиента = reader.GetFieldValue<int>(5),
-                                ФИО =  reader.GetFieldValue<string>(6),
-                                Госномер = reader.GetFieldValue<string>(7),
+                                ФИО = reader.IsDBNull(6) ? null : reader.GetFieldValue<string>(6),
+                                Госномер = reader.IsDBNull(7) ? null : reader.GetFieldValue<string>(7),
                                 Стоимость = reader.IsDBNull(8) ? null : reader.GetFieldValue<int>(8),
                                 Сумма = reader.IsDBNull(9) ? null : reader.GetFieldValue<int>(9)
                             };
@@ -265,7 +296,7 @@ namespace WebApplication1.Controllers
             {
                 transaction.Rollback();
                 // Log the exception here
-                return StatusCode(500, "An error occurred while inserting data.");
+                return StatusCode(500, "Произошла ошибка...");
             }
         }
 
@@ -415,13 +446,13 @@ namespace WebApplication1.Controllers
             using var transaction = connection.BeginTransaction();
             try
             {
-                using (var command = new NpgsqlCommand("SELECT COUNT(*) FROM \"Стоянка\".\"Realisation\" WHERE \"Место\" LIKE 'В%' AND \"Место\" = @place", connection))
+                using (var command = new NpgsqlCommand("SELECT * FROM \"Стоянка\".\"Realisation\" WHERE \"Место\" = @place AND (\"Код_услуги\" = 1 OR \"Код_услуги\" = 2);", connection))
                 {
                     command.Parameters.AddWithValue("place", place);
-                    var count = Convert.ToInt64(command.ExecuteScalar());
-                    if (count > 0)
+                    using var reader = command.ExecuteReader();
+                    if (reader.Read())
                     {
-                        return BadRequest(new { message = "Место забронировано" });
+                        return BadRequest(new { message = "Место уже забронировано" });
                     }
                 }
 
@@ -587,30 +618,35 @@ namespace WebApplication1.Controllers
         [HttpPost("check-email")]
         public async Task<IActionResult> CheckEmail([FromBody] EmailRequest emailRequest)
         {
-            using (var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection")))
+            using var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection"));
+            await connection.OpenAsync();
+
+            // **Added transaction**
+            using var transaction = connection.BeginTransaction();
+            try
             {
-
-                await connection.OpenAsync();
-
                 string query = "SELECT * FROM \"Стоянка\".\"Klients\" WHERE \"Почта\" = @Email";
-                using (NpgsqlCommand command = new NpgsqlCommand(query, connection))
-                {
-                    command.Parameters.AddWithValue("Email", emailRequest.Email);
+                using NpgsqlCommand command = new(query, connection);
+                command.Parameters.AddWithValue("Email", emailRequest.Email);
 
-                    using (NpgsqlDataReader reader = await command.ExecuteReaderAsync())
-                    {
-                        if (reader.HasRows)
-                        {
-                            // Если найден пользователь с указанным адресом электронной почты, то возвращаем статус 200 OK и объект с полем "success" со значением true
-                            return Ok(new { success = true });
-                        }
-                        else
-                        {
-                            // Если пользователь с указанным адресом электронной почты не найден, то возвращаем статус 200 OK и объект с полем "success" со значением false
-                            return Ok(new { success = false });
-                        }
-                    }
+                using NpgsqlDataReader reader = await command.ExecuteReaderAsync();
+                if (reader.HasRows)
+                {
+                    // Если найден пользователь с указанным адресом электронной почты, то возвращаем статус 200 OK и объект с полем "success" со значением true
+                    transaction.Commit(); // Commit the transaction
+                    return Ok(new { success = true });
                 }
+                else
+                {
+                    // Если пользователь с указанным адресом электронной почты не найден, то возвращаем статус 200 OK и объект с полем "success" со значением false
+                    transaction.Rollback(); // Rollback the transaction
+                    return Ok(new { success = false });
+                }
+            }
+            catch (Exception)
+            {
+                transaction.Rollback(); // Rollback the transaction on error
+                throw; // Rethrow the exception
             }
         }
     }

@@ -11,7 +11,7 @@ namespace WebApplication1.DB
         public required string Цвет { get; set; }
         public required string Тип { get; set; }
         [Required]
-        [StringLength(6, MinimumLength = 6, ErrorMessage = "Госномер должен состоять из 6 символов.")]
+        [StringLength(10, MinimumLength =6 , ErrorMessage = "Госномер должен состоять из 6-10 символов.")]
         public required string Госномер { get; set; }
         [Required]
         [Range(1950, int.MaxValue, ErrorMessage = "Год должен быть не меньше 1950.")]

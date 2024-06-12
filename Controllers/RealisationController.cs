@@ -124,7 +124,7 @@ namespace WebApplication1.Controllers
             // Проверяем дополнительные условия для места и кода услуги
             if (realisation.Место.StartsWith("A") && (realisation.Код_услуги == 1 || realisation.Код_услуги == 2))
             {
-                ModelState.AddModelError(string.Empty, "Ошибка: место начинается с 'A' и код_услуги равен 1 или 2");
+                ModelState.AddModelError(string.Empty, "Ошибка: Данная услуга не применима для данного сектора");
                 return BadRequest(ModelState);
             }
 
