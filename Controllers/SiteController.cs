@@ -618,35 +618,30 @@ namespace WebApplication1.Controllers
         [HttpPost("check-email")]
         public async Task<IActionResult> CheckEmail([FromBody] EmailRequest emailRequest)
         {
-            using var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection"));
-            await connection.OpenAsync();
-
-            // **Added transaction**
-            using var transaction = connection.BeginTransaction();
-            try
+            using (var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection")))
             {
+
+                await connection.OpenAsync();
+
                 string query = "SELECT * FROM \"Стоянка\".\"Klients\" WHERE \"Почта\" = @Email";
-                using NpgsqlCommand command = new(query, connection);
-                command.Parameters.AddWithValue("Email", emailRequest.Email);
+                using (NpgsqlCommand command = new NpgsqlCommand(query, connection))
+                {
+                    command.Parameters.AddWithValue("Email", emailRequest.Email);
 
-                using NpgsqlDataReader reader = await command.ExecuteReaderAsync();
-                if (reader.HasRows)
-                {
-                    // Если найден пользователь с указанным адресом электронной почты, то возвращаем статус 200 OK и объект с полем "success" со значением true
-                    transaction.Commit(); // Commit the transaction
-                    return Ok(new { success = true });
+                    using (NpgsqlDataReader reader = await command.ExecuteReaderAsync())
+                    {
+                        if (reader.HasRows)
+                        {
+                            // Если найден пользователь с указанным адресом электронной почты, то возвращаем статус 200 OK и объект с полем "success" со значением true
+                            return Ok(new { success = true });
+                        }
+                        else
+                        {
+                            // Если пользователь с указанным адресом электронной почты не найден, то возвращаем статус 200 OK и объект с полем "success" со значением false
+                            return Ok(new { success = false });
+                        }
+                    }
                 }
-                else
-                {
-                    // Если пользователь с указанным адресом электронной почты не найден, то возвращаем статус 200 OK и объект с полем "success" со значением false
-                    transaction.Rollback(); // Rollback the transaction
-                    return Ok(new { success = false });
-                }
-            }
-            catch (Exception)
-            {
-                transaction.Rollback(); // Rollback the transaction on error
-                throw; // Rethrow the exception
             }
         }
     }
