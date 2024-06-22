@@ -2,10 +2,12 @@ using NUnit.Framework;
 using Moq;
 using AutoMapper;
 using Microsoft.Extensions.Configuration;
-using WebApplication2.Controllers;
-using WebApplication2.DB;
+
 using AutoMapper.Configuration;
 using Microsoft.AspNetCore.Mvc;
+using WebApplication1.DB;
+using WebApplication1.Controllers;
+using System.ComponentModel.DataAnnotations;
 
 namespace TestProject3
 {
@@ -23,13 +25,6 @@ namespace TestProject3
             _mapper = new Mock<IMapper>();
         }
 
-        [SetUp]
-        public void SetUp()
-        {
-            // Arrange
-            _mapper.Setup(m => m.Map(It.IsAny<object>(), It.IsAny<object>()))
-               .Returns(new object());
-        }
 
         [Test]
         public async Task Get_ReturnsOkObjectResult_WhenParametersAreValid()
@@ -37,14 +32,14 @@ namespace TestProject3
             // Arrange
             var controller = CreateKlientController();
             var columnName = "ФИО";
-            var columnValue = "Updated John Rambo";
+            var columnValue = "User2";
 
             // Act
-            var result = await controller.Get(columnName, columnValue);
+            var result = await controller.SearchClients(columnName, columnValue);
 
             // Assert
             Assert.That(result, Is.InstanceOf<OkObjectResult>());
-            var klients = (List<Klients>)((OkObjectResult)result).Value;
+            var klients = ((OkObjectResult)result).Value as List<Klients>;
             Assert.That(klients, Is.Not.Empty);
         }
 
@@ -57,7 +52,7 @@ namespace TestProject3
             var columnValue = "";
 
             // Act
-            var result = await controller.Get(columnName, columnValue);
+            var result = await controller.SearchClients(columnName, columnValue);
 
             // Assert
             Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
@@ -65,12 +60,21 @@ namespace TestProject3
             Assert.That(error, Is.EqualTo("He укaзaны napaметры для поиска"));
         }
 
+
         [Test]
         public async Task Post_CreatesNewKlient_WhenModelIsValid()
         {
             // Arrange
             var controller = CreateKlientController();
-            var klient = new Klients { ФИО = "John Doe",Дата_рождения=Convert.ToDateTime("21-06-2001"), Почта = "john.doe@example.com",Логин="Not repeat",Пароль="test",Код_авто=5 };
+            var klient = new Klients
+            {
+                ФИО = "John Doe",
+                Дата_рождения = Convert.ToDateTime("21-06-2001"),
+                Почта = "john.doeexample.com", // Валидная почта
+                Логин = "Not repeat2222",
+                Пароль = "test",
+                Код_авто = 0
+            };
 
             // Act
             var result = await controller.Post(klient);
@@ -85,6 +89,11 @@ namespace TestProject3
             Assert.AreEqual(klient.Пароль, createdKlient.Пароль);
             Assert.AreEqual(klient.Код_авто, createdKlient.Код_авто);
 
+            // Проверка валидации почты
+            var context = new System.ComponentModel.DataAnnotations.ValidationContext(klient, serviceProvider: null, items: null);
+            var results = new List<ValidationResult>();
+            var isValid = Validator.TryValidateObject(klient, context, results, true);
+            Assert.IsTrue(isValid, "Модель не прошла валидацию");
         }
 
         [Test]
@@ -92,23 +101,27 @@ namespace TestProject3
         {
             // Arrange
             var controller = CreateKlientController();
-            var existingKlientId = 1; // В бд не существует клиент с ID 1
+            var existingKlientId = 0; // 
             var updatedKlient = new Klients
             {
                 Код_клиента = existingKlientId,
                 ФИО = "Updated John Rambo",
                 Дата_рождения = Convert.ToDateTime("22-07-2002"),
-                Почта = "121212",
+                Почта = "mail",
                 Логин = "updatedLogin",
                 Пароль = "updatedPassword",
-                Код_авто = 7
+                Код_авто = 0
             };
-
+            // Проверка валидации почты
+            var context = new System.ComponentModel.DataAnnotations.ValidationContext(updatedKlient, serviceProvider: null, items: null);
+            var results = new List<ValidationResult>();
+            var isValid = Validator.TryValidateObject(updatedKlient, context, results, true);
+            Assert.IsTrue(isValid, "Модель не прошла валидацию");
             // Act
-            var result = await controller.Put(existingKlientId, updatedKlient);
-
+            var result = await controller.UpdateClient(existingKlientId, updatedKlient);
             // Assert
-            Assert.IsInstanceOf<OkResult>(result); 
+            Assert.IsInstanceOf<OkResult>(result);
+           
         }
 
         [Test]
@@ -116,14 +129,14 @@ namespace TestProject3
         {
             // Arrange
             var controller = CreateKlientController();
-            var existingKlientId = 31; // Предполагаем, что у нас есть существующий клиент с ID 1
+            var existingKlientId = 0; 
 
             // Act
-            var result = await controller.Delete(existingKlientId);
+            var result = await controller.DeleteClient(existingKlientId);
 
             // Assert
             Assert.IsInstanceOf<OkResult>(result);
-            // Можно добавить дополнительную проверку, чтобы убедиться, что запись была фактически удалена из базы данных
+            
         }
 
         private KlientController CreateKlientController()
