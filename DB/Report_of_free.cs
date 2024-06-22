@@ -12,7 +12,7 @@ namespace WebApplication1.DB
         [Required]
         [StringLength(15, MinimumLength = 2, ErrorMessage = "Длина марки должна быть от 2 до 15 символов.")]
         public required string Марка { get; set; }
-        public required DateTime Дата_въезда { get; set; }
+        public required DateTime Дата_выезда { get; set; }
         
     }
 }

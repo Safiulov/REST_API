@@ -8,9 +8,9 @@ namespace WebApplication1.DB
         [Required]
         [EmailAddress]
         public required string Email { get; set; }
-        [StringLength(20, MinimumLength = 5, ErrorMessage = "Длина логина должна быть от 5 до 20 символов.")]
+        [StringLength(100, MinimumLength = 5, ErrorMessage = "Длина логина должна быть от 5 до 20 символов.")]
         public required string Login { get; set; }
-        [StringLength(20, MinimumLength = 5, ErrorMessage = "Длина пароля должна быть от 5 до 20 символов.")]
+        [StringLength(100, MinimumLength = 5, ErrorMessage = "Длина пароля должна быть от 5 до 20 символов.")]
         public required string Password { get; set; }
         [Required]
         [StringLength(15, MinimumLength = 2, ErrorMessage = "Длина марки должна быть от 2 до 15 символов.")]

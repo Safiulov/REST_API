@@ -58,10 +58,10 @@ namespace WebApplication1.Controllers
             }
             using var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection"));
             // Создаем SQL-запрос для обновления услуги по идентификатору
-            string query = "UPDATE \"Стоянка\".\"Service\" SET \"Описание\"=@Описание, \"Оплата\"=@Оплата, \"Стоимость\"=@Стоимость WHERE \"Код_услуги\" = @id;";
+            string query = "UPDATE \"Стоянка\".\"Service\" SET \"Стоимость\"=@Стоимость WHERE \"Код_услуги\" = @id;";
 
             // Используем Dapper для выполнения запроса обновления и получения количества затронутых строк
-            int rowsAffected = await connection.ExecuteAsync(query, new { id, service.Описание, service.Оплата, service.Стоимость });
+            int rowsAffected = await connection.ExecuteAsync(query, new { id, service.Стоимость });
 
             // Если была обновлена одна строка, возвращаем статус Ok
             if (rowsAffected == 1)

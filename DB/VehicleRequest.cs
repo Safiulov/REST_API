@@ -9,7 +9,7 @@ namespace WebApplication1.DB
         public required string Место { get; set; }
         public required DateTime Дата { get; set; }
         [Required]
-        [StringLength(20, MinimumLength = 5, ErrorMessage = "Длина логина должна быть от 5 до 20 символов.")]
+        [StringLength(100, MinimumLength = 5, ErrorMessage = "Длина логина должна быть от 5 до 20 символов.")]
         public required string Логин { get; set; }
     }
 }

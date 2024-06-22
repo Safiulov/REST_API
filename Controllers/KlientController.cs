@@ -1,6 +1,5 @@
 ﻿using Dapper;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Caching.Memory;
 using Npgsql;
 using WebApplication1.DB;
 
@@ -69,8 +68,8 @@ namespace WebApplication1.Controllers
 
             // Use Dapper to execute the query and get the number of rows affected
             var rowsAffected = await connection.ExecuteAsync(
-                "UPDATE \"Стоянка\".\"Klients\" SET \"ФИО\"=@ФИО, \"Код_авто\"=@Код_авто, \"Дата_рождения\"=@Дата_рождения, \"Почта\"=@Почта,\"Логин\"=@Логин WHERE \"Код_клиента\" = @id;",
-                new { id, klient.ФИО, klient.Дата_рождения, klient.Почта, klient.Логин, klient.Код_авто }
+                "UPDATE \"Стоянка\".\"Klients\" SET \"ФИО\"=@ФИО,  \"Дата_рождения\"=@Дата_рождения, \"Почта\"=@Почта WHERE \"Код_клиента\" = @id;",
+                new { id, klient.ФИО, klient.Дата_рождения, klient.Почта,klient.Код_авто }
             );
 
             // Check if the update was successful

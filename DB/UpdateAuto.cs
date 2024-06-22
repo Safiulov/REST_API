@@ -16,7 +16,7 @@ namespace WebApplication1.DB
         [Range(1950, int.MaxValue, ErrorMessage = "Год должен быть не меньше 1950.")]
         public required int Год { get; set; }
         [Required]
-        [StringLength(20, MinimumLength = 5, ErrorMessage = "Длина логина должна быть от 5 до 20 символов.")]
+        [StringLength(100, MinimumLength = 5, ErrorMessage = "Длина логина должна быть от 5 до 20 символов.")]
         public required string Логин { get; set; }
     }
 }

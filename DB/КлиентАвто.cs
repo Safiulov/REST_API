@@ -13,10 +13,10 @@ namespace WebApplication1.DB
         [EmailAddress]
         public required string Почта { get; set; }
         [Required]
-        [StringLength(20, MinimumLength = 5, ErrorMessage = "Длина логина должна быть от 5 до 20 символов.")]
+        [StringLength(100, MinimumLength = 5, ErrorMessage = "Длина логина должна быть от 5 до 20 символов.")]
         public required string Логин { get; set; }
         [Required]
-        [StringLength(20, MinimumLength = 5, ErrorMessage = "Длина пароля должна быть от 5 до 20 символов.")]
+        [StringLength(100, MinimumLength = 5, ErrorMessage = "Длина пароля должна быть от 5 до 20 символов.")]
         public required string Пароль { get; set; }
 
         public  int Код_авто { get; set; }

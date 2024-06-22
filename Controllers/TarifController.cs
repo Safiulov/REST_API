@@ -55,29 +55,27 @@ namespace WebApplication1.Controllers
         [HttpPut("{id}")]
         public async Task<IActionResult> Put(int id, [FromBody] Tarifs tarifs)
         {
-            if (!ModelState.IsValid)
+            var connectionString = _databaseService.GetConnectionString("DefaultConnection");
+            using var connection = new NpgsqlConnection(connectionString);
+            await connection.OpenAsync();
+            // Создаем SQL-запрос для обновления тарифа по идентификатору
+            int rowsAffected = await connection.ExecuteAsync(
+           "UPDATE \"Стоянка\".\"Tarifs\" SET \"Название\"=@Название,\"Стоимость\"=@Стоимость  WHERE \"Код_тарифа\" = @id;",
+           new { id, tarifs.Название, tarifs.Стоимость }
+       );
+
+            // Если затронута только одна строка, возвращаем статус 200 OK
+            if (rowsAffected == 1)
             {
-                return BadRequest(ModelState);
+                return Ok();
             }
-
-                using var connection = new NpgsqlConnection(_databaseService.GetConnectionString("DefaultConnection"));
-                // Создаем SQL-запрос для обновления тарифа по идентификатору
-                string query = "UPDATE \"Стоянка\".\"Tarifs\" SET \"Условие\"=@Условие, \"Время_действия\"=@Время_действия, \"Стоимость\"=@Стоимость WHERE \"Код_тарифа\" = @id;";
-
-                // Используем Dapper для выполнения обновления данных
-                int rowsAffected = await connection.ExecuteAsync(query, new { id, tarifs.Условие, tarifs.Время_действия, tarifs.Стоимость });
-
-                if (rowsAffected == 1)
-                {
-                    return Ok();
-                }
-                else
-                {
-                    return NotFound();
-                }
-           
+            // Если затронутых строк нет, возвращаем статус 404 Not Found
+            else
+            {
+                return NotFound();
+            }
         }
 
 
-    }
+        }
 }
